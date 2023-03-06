@@ -21,12 +21,12 @@ curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh
 git clone git@github.com:MaelLefeuvre/pmd-mask.git
 ```
 
-3. Compile and install
+2. Compile and install
 ```Bash
 RUSTFLAGS="-Ctarget-cpu=native" cargo install --path .
 ```
 
-4. Grups should be located within `~/.cargo/bin/` and included in your PATH
+3. `pmd-mask` should be located within `~/.cargo/bin/` and included in your PATH
 ```Bash
 pmd-mask --help
 ```
