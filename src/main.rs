@@ -1,78 +1,30 @@
 use std::collections::HashMap;
-use std::fmt::{Display, Formatter, self};
-use std::fs::File;
-use std::io::{BufReader, BufRead};
-use std::path::PathBuf;
-use std::str::FromStr;
 
 use rust_htslib::{bam, bam::Read};
 use rust_htslib::faidx;
 
-use clap::{Parser, Args};
-use serde::Deserialize;
-use csv::{Error, ReaderBuilder};
-use num_cpus;
+
+use csv::{ReaderBuilder};
+use num_cpus::{self};
+
+use clap::Parser;
 
 mod logger;
 
+mod parser;
+use parser::Cli;
+
+mod misincorporation;
+use misincorporation::MisincorporationRecord;
+
+mod genome;
+use genome::{ChrName, Orientation, Strand};
+
+mod mask;
+use mask::{MaskEntry, MaskThreshold};
+
+
 use log::{info, warn, debug, trace};
-
-#[derive(Parser, Debug)]
-#[command(name="pmd-mask", author, version, about, long_about = None)]
-#[clap(propagate_version = true)]
-struct Cli {
-    /// Optional name to operate on
-    #[arg(short, long, default_value("0.01"))]
-    threshold: f32,
-
-    /// Input bam file, on which pmd-masking should be performed. When unspecified, the program will look for standard input.
-    #[arg(short, long, required(false))]
-    bam: Option<PathBuf>,
-
-    /// Output bam file. If not specified, print to stdout.
-    #[arg(short, long, required(false))]
-    output: Option<PathBuf>,
-
-    /// Output format. (Sam, Bam, CRAM). If unspecified:
-    /// - Sam if stdout
-    /// - original 
-    #[arg(short='O', long, required(false))]
-    output_fmt: Option<String>,
-
-    /// Set the compression level. 9 if unspecified
-    #[arg(long, default_value("9"))]
-    compress_level: u32,
-
-    /// Path to a fasta indexed reference genome.
-    #[arg(short='f', long)]
-    reference: PathBuf,
-
-    /// Path to a misincorporation file
-    #[arg(short, long)]
-    misincorporation: PathBuf,
-
-    /// Set the verbosity level (-v -vv -vvv -vvv)
-    /// 
-    /// Set the verbosity level of this program. Multiple levels available, depending on the number of calls to this argument.
-    /// -v (Info) | -vv (Debug) | -vvv (Trace)
-    /// Warn level is active no matter what, but can be disabled by using the --quiet argument
-    #[arg(short='v', long, action = clap::ArgAction::Count)]
-    verbose: u8,
-
-    /// Disable warnings.
-    /// 
-    /// By defaults, warnings are emmited and redirected to stderr no matter the verbosity level.
-    /// Use this argument to disable warnings. Only errors will be displayed
-    /// Note that using this argument will also have the effect of removing verbosity.
-    #[clap(short='q', long)]
-    quiet: bool,
-
-    /// Set threads threads 
-    ///
-    /// Set the number of additional decompression threads. Setting this value to zero will preempt all the available cores.
-    #[clap(short='@', long, default_value("1"))]
-    threads: u32
-}
 
 
 // What's gonna happen:
@@ -93,180 +45,10 @@ struct Cli {
 
 // ---- Sanity checks:
 // Ensure Provided reference matches the reference in the bam header.
-// Warn user if misincorporation frequencies are Inf, Nan, or were computed from empty C.
-
-
-#[derive(Debug, Deserialize, PartialEq, Eq, Hash)] 
-enum Strand {
-    #[serde(rename = "+")]
-    Forward,
-    #[serde(rename = "-")]
-    Reverse
-}
-
-impl Strand {
-    pub fn symbol(&self) -> &str {
-        match self {
-            Self::Forward => "+",
-            Self::Reverse => "-",
-        }
-    }
-}
-
-impl Display for Strand {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.symbol().fmt(f)
-    }
-}
-
-impl FromStr for Strand {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "+" => Ok(Self::Forward),
-            "-" => Ok(Self::Reverse),
-            other => Err(format!("Incalid Strand. Got {other}"))
-
-        }
-    }
-}
-
-#[derive(Debug, Deserialize, PartialEq, Eq, Hash)]
-enum Orientation {
-    #[serde(rename = "3p")]
-    ThreePrime,
-    #[serde(rename = "5p")]
-    FivePrime,
-}
-
-impl Display for Orientation {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let repr = match self {
-            Self::ThreePrime => "3p",
-            Self::FivePrime  => "5p",
-        };
-        repr.fmt(f)
-    }
-}
-
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Hash)]
-struct Chromosome(String);
-
-impl Display for Chromosome {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-#[derive(Debug, Deserialize, Hash, PartialEq, Eq)]
-struct Position(usize);
-
-impl Display for Position {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-#[derive(Debug, Deserialize)]
-struct MisincorporationEntry {
-    #[serde(rename(deserialize = "Chr"))] chromosome: Chromosome,
-    #[serde(rename(deserialize = "End"))] end: Orientation,
-    #[serde(rename(deserialize = "Std"))] strand: Strand,
-    #[serde(rename(deserialize = "Pos"))] position: Position, 
-    #[serde(rename(deserialize = "C"))]   c_counts: usize,
-    #[serde(rename(deserialize = "G"))]   g_counts: usize,
-    #[serde(rename(deserialize = "C>T"))] c_to_t: usize, 
-    #[serde(rename(deserialize = "G>A"))] g_to_a: usize,
-}
-
-impl MisincorporationEntry {
-    /// Return the relative C>T frequency 
-    /// This is computed as the number of observed C>T, divided by the number of observed C.
-    fn c_to_t_freq(&self) -> f32 {
-        self.c_to_t as f32 / self.c_counts as f32
-    }
-
-    /// Return the relative G>A frequency.
-    /// This is computed as the number of observed G>A, divided by the number of observed G.
-    fn g_to_a_freq(&self) -> f32 {
-        self.g_to_a as f32 / self.g_counts as f32
-    }
-
-    /// Return the frequency we're really interested in:
-    /// If this entry is a 5p -> return C>T relative frequency (see [c_to_freq()])
-    /// If this entry is a 3p -> return G>A relative frequency (see [g_to_a_freq()])
-    fn target_freq(&self) -> f32 {
-        match self.end {
-            Orientation::FivePrime  => self.c_to_t_freq(),
-            Orientation::ThreePrime => self.g_to_a_freq(),
-        }
-    }
-}
-
-impl Display for MisincorporationEntry {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "Chr: {:<15} End: {: <3} Strand: {: <2} Pos: {: <4} C: {: <9} G: {: <9} C>T: {: <9} ({: <9.6}) G>A: {: <9} ({: <9.6})", 
-            self.chromosome,
-            self.end,
-            self.strand,
-            self.position,
-            self.c_counts,
-            self.g_counts,
-            self.c_to_t,
-            self.c_to_t_freq(),
-            self.g_to_a,
-            self.g_to_a_freq(),
-        )
-    }
-}
-
-#[derive(Debug, Hash, PartialEq, Eq)]
-struct MisincorporationRecord {
-    chromosome: Chromosome,
-    strand: Strand
-}
-
-impl Display for MisincorporationRecord {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {}", self.chromosome, self.strand)
-    }
-}
-
-
-
-#[derive(Debug)]
-struct MisincorporationThreshold { inner: HashMap<Orientation, Position>}
-
-impl Default for MisincorporationThreshold {
-    fn default() -> Self {
-        Self { inner: HashMap::with_capacity(2) }
-    }
-
-}
-
-impl MisincorporationThreshold {
-    
-    fn set_threshold(&mut self, orientation: Orientation, position: Position) {
-        self.inner.insert(orientation, position);
-    }
-
-    fn validate(&self) -> Result<(), String> {
-        if self.inner.len() != 2 {
-            return Err("Invalid Threshold".to_string())
-        }
-        Ok(())
-    }
-
-    fn get_threshold(&self, orientation: &Orientation) -> &Position {
-        self.inner.get(orientation).unwrap()
-    }
-
-}
-
+// [DONE] Warn user if misincorporation frequencies are Inf, Nan, or were computed from empty C.
 
 fn main() {
-    // ---- parse arguments
+    // ---- Parse arguments
     let args = Cli::parse();
 
     // ---- initialize logger
@@ -278,8 +60,8 @@ fn main() {
     info!("Setting threads to {threads}");
     let pool = rust_htslib::tpool::ThreadPool::new(threads).unwrap();
 
-    
-    // ---- Read Misincorporation file
+
+    // ---- Read Misincorporation file as a tsv file.
     let mut reader = ReaderBuilder::new()
         .delimiter(b'\t')
         .has_headers(true)
@@ -287,9 +69,10 @@ fn main() {
         .from_path(args.misincorporation)
         .unwrap(); 
 
-    let mut skip_chromosome: Option<(&Chromosome, &Orientation, &Strand)> = None; 
-    let mut threshold_positions = Vec::with_capacity(32);
-    'nextline: for result in reader.deserialize::<MisincorporationEntry>() {
+    let mut skip_chromosome: Option<(&ChrName, &Orientation, &Strand)> = None; 
+    let mut threshold_positions = Vec::with_capacity(32 * 2 * 2);
+
+    'nextline: for result in reader.deserialize::<MisincorporationRecord>() {
         let record = result.unwrap();
 
         // Once we've found a position at which the threshold is met, we 
@@ -305,13 +88,13 @@ fn main() {
             threshold_positions.push(record);
             let last_insert = threshold_positions.last().unwrap(); // We can unwrap here since we know we've just pushed a value
             skip_chromosome = Some((&last_insert.chromosome, &last_insert.end, &last_insert.strand)); 
-
+            
         }
     }
 
-    // ---- Validate misincorporation and issue warnings
+    // ---- Validate misincorporation and issue warnings for any 'abnormal' frequency found.
     let mut abnormal_frequencies = String::new();
-    let threshold_positions: Vec<MisincorporationEntry> = threshold_positions.into_iter().filter_map(|pos| {
+    let threshold_positions: Vec<MisincorporationRecord> = threshold_positions.into_iter().filter_map(|pos| {
         if pos.target_freq().is_normal() {
             Some(pos)
         } else {
@@ -321,8 +104,10 @@ fn main() {
     }).collect();
     abnormal_frequencies.pop();
 
+    if !abnormal_frequencies.is_empty() {
+        warn!("Found abnormal misincorporation frequencies (NaN, Infinite values, etc.). Masking will apply along the full length of the sequence for those:\n{abnormal_frequencies}");
+    }
 
-    warn!("Found abnormal misincorporation frequencies (NaN, Infinite values, etc.). Masking will be disabled for those:\n{abnormal_frequencies}");
     debug!("Using the following positions as threshold for masking:\n{}",
         threshold_positions.iter().fold(String::new(), |acc, val| {
             acc + &format!("{val}\n")
@@ -330,13 +115,15 @@ fn main() {
     );
 
     // ---- Convert to a more usable format. This is a crash test after all...
-    let mut thresholds = HashMap::new(); //HashMap<MisincorporationRecord, MisincorporationThreshold> = HashMap::new();
+    let mut thresholds = HashMap::new();
     for position in threshold_positions {
-        let record = MisincorporationRecord{chromosome: position.chromosome, strand: position.strand};
-        thresholds.entry(record).or_insert(MisincorporationThreshold::default()).set_threshold(position.end, position.position);
+        let record = MaskEntry{chromosome: position.chromosome, strand: position.strand};
+        thresholds.entry(record)
+            .or_insert(MaskThreshold::default())
+            .set_threshold(position.end, position.position);
     }
 
-    // ---- Validate thresholds: Each one must contain a hashmap w/ two values (one for 3p, the other for 5p)
+    // ---- Validate thresholds: Each record must contain a hashmap w/ two values (one for 3p, the other for 5p)
     for (record, threshold) in thresholds.iter() {
         trace!("Validating {record:?} {threshold:?}");
         threshold.validate().unwrap()
@@ -383,7 +170,8 @@ fn main() {
     writer.set_reference(args.reference).unwrap();
 
 
-    let mut out_record = rust_htslib::bam::Record::new();
+    let mut out_record    = rust_htslib::bam::Record::new();
+    let default_threshold = MaskThreshold::default();
     // ---- Loop along input records
     'record: while let Some(result) = bam.read(&mut record) {
         result.unwrap();
@@ -391,15 +179,18 @@ fn main() {
         // ---- Get chromosome and strand info of this record.
         // EXPENSIVE: converting tid to string.
         // @ TODO: map Misincorporation chromosome names to tid. once, before looping.
-        let chromosome = Chromosome(std::str::from_utf8(header_view.tid2name(record.tid() as u32)).unwrap().to_string());
-        let strand = Strand::from_str(record.strand().strand_symbol()).unwrap();
-        let current_record = MisincorporationRecord{chromosome, strand};
+        let chromosome = ChrName(std::str::from_utf8(header_view.tid2name(record.tid() as u32)).unwrap().to_string());
+        let strand = record.strand().strand_symbol().parse::<Strand>().unwrap();
+        let current_record = MaskEntry{chromosome, strand};
         
 
         // ---- Get relevant misincorporation frequency:
-        let Some(relevant_thresholds) = thresholds.get(&current_record) else {
-            trace!("{current_record} Not found in threshold dictionary. Skipping");
-            continue 'record
+        let relevant_thresholds = match thresholds.get(&current_record) {
+            Some(threshold) => threshold,
+            None => {
+                debug!("{current_record} Not found in threshold dictionary. Setting default threshold {default_threshold}");
+                &default_threshold
+            }
         };
 
         // EXPENSIVE: converting sequence to utf8
@@ -411,11 +202,13 @@ fn main() {
         let position = record.pos();
         let end = record.seq_len();
         let reference = reference.fetch_seq(&current_record.chromosome.0, position as usize, position as usize + end - 1).unwrap();
-        trace!("Relevant thresholds: {relevant_thresholds:#?}");
-        trace!("{} {position} {} {sequence:?}", current_record.chromosome, current_record.strand);
-        
-        let mut new_seq = record.seq().as_bytes(); // EXPENSIVE: Allocation
-        let mut new_quals = record.qual().to_vec(); // EXPENSIVE: Allocation
+
+        trace!("-----------------------");
+        trace!("---- Inspecting record: {current_record} {position}");
+        trace!("Relevant thresholds: {relevant_thresholds}");
+
+        let mut new_seq   = record.seq().as_bytes(); // EXPENSIVE: Allocation
+        let mut new_quals = record.qual().to_vec();  // EXPENSIVE: Allocation
 
         trace!("Reference: {}", std::str::from_utf8(reference).unwrap());
         trace!("Sequence : {sequence}");
@@ -426,7 +219,7 @@ fn main() {
                 break 'mask5p
             }
 
-            let decoded_nuc = unsafe { record.seq().decoded_base_unchecked(i) };
+            //let decoded_nuc = unsafe { record.seq().decoded_base_unchecked(i) };
             if reference[i] == b'C' {
                 new_seq[i] = b'N';
                 new_quals[i] = 0;
@@ -439,7 +232,7 @@ fn main() {
                 break 'mask3p
             }
             
-            let decoded_nuc = unsafe { record.seq().decoded_base_unchecked(i) };
+            //let decoded_nuc = unsafe { record.seq().decoded_base_unchecked(i) };
             if reference[i] == b'G' {
                 new_seq[i] = b'N';
                 new_quals[i] = 0;
@@ -450,7 +243,7 @@ fn main() {
         trace!("Masked   : {}", std::str::from_utf8(&new_seq).unwrap());
 
 
-        let mut out_record = record.clone();
+        record.clone_into(&mut out_record);
         out_record.set(record.qname(), Some(&record.cigar().take()), &new_seq, &new_quals);
         //println!("{record:#?}");
         writer.write(&out_record).unwrap();

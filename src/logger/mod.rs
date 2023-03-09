@@ -61,6 +61,7 @@ impl Logger {
         }
     }
 
+    #[cfg(test)]
     pub fn set_level(verbosity: u8) {
         log::set_max_level(Self::u8_to_loglevel(verbosity));
     }
