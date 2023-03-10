@@ -59,7 +59,10 @@ fn main() -> Result<()> {
     // ---- define threads:
     let threads = if args.threads == 0 {num_cpus::get() as u32 } else {args.threads};
     info!("Setting threads to {threads}");
-    let pool = ThreadPool::new(threads)?;
+    let thread_pool = match threads {
+        1 => None,
+        _ => Some(ThreadPool::new(threads)?)
+    };
 
 
     // ---- Read Misincorporation file as a tsv file.
@@ -90,12 +93,19 @@ fn main() -> Result<()> {
 
     // ---- Open bam file
     let mut bam = match args.bam {
-        Some(path) => bam::Reader::from_path(path),
+        Some(ref path) => bam::Reader::from_path(path),
         None       => bam::Reader::from_stdin(),
     }?;
 
+    // ---- IndexedRead: Does not seem to provide with any underlying async/multithread support either..
+    //let mut bam = bam::IndexedReader::from_path(args.bam.unwrap()).unwrap();
+    //bam.fetch(bam::FetchDefinition::All);
+
     bam.set_reference(&args.reference)?;
-    bam.set_thread_pool(&pool)?;
+    if let Some(ref pool) = thread_pool {
+        bam.set_thread_pool(pool)?;
+    };
+    
 
     // ---- Get header template
     let header = bam::Header::from_template(bam.header());    
@@ -121,8 +131,11 @@ fn main() -> Result<()> {
         None       => bam::Writer::from_stdout(&header, out_fmt),
     }?;
     writer.set_compression_level(bam::CompressionLevel::Level(args.compress_level))?;
-    writer.set_thread_pool(&pool)?;
     writer.set_reference(args.reference)?;
+    
+    if let Some(ref pool) = thread_pool {
+        writer.set_thread_pool(pool)?; 
+    }
 
 
     let mut out_record    = bam::Record::new();
