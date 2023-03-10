@@ -1,9 +1,11 @@
 use std::{fmt::{self, Display, Formatter}, str::FromStr};
 use serde::Deserialize;
 
+mod error;
+pub use error::StrandError;
 
 /// Strand orientation representation for paired-end sequencing reads.
-#[derive(Debug, Deserialize, PartialEq, Eq, Hash)] 
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, Hash)] 
 pub enum Strand {
     #[serde(rename = "+")] Forward,
     #[serde(rename = "-")] Reverse
@@ -26,23 +28,27 @@ impl Display for Strand {
 }
 
 impl FromStr for Strand {
-    type Err = String;
+    type Err = StrandError;
 
     /// Attempt to convert a string sequence into a Strand representation.
     /// Valid values are either "+" or "-". Anything else will result in an error
+    /// 
+    /// # Errors
+    /// 
+    /// will return a [`StrandError::ParseStrand`] error upon encountering any character that is neither '+' nor '-'
     /// ```
     /// let forward_strand = "+".parse::<Strand>();
     /// assert_eq!(forward_strand, Ok(Strand::Forward));
     /// let reverse_strand = Strand::from_str("-");
     /// assert_eq!(reverse_strand, Ok(Strand::Reverse));
     /// let strange_strand = "x".parse::<Strand>();
-    /// assert!(strange_strand.is_err()) //unwrap()
+    /// assert_eq!(strange_strand, StrandError::ParseStrand)
     /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "+" => Ok(Self::Forward),
-            "-" => Ok(Self::Reverse),
-            other => Err(format!("Invalid Strand. Got {other}")) // unwrap()
+            "+"   => Ok(Self::Forward),
+            "-"   => Ok(Self::Reverse),
+            other => Err(Self::Err::ParseStrand(other.to_string()))
 
         }
     }

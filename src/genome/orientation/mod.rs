@@ -1,7 +1,7 @@
 use std::{fmt::{self, Display, Formatter}};
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, Hash)]
 pub enum Orientation {
     #[serde(rename = "3p")]
     ThreePrime,

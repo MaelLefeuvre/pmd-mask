@@ -3,7 +3,7 @@ use std::{fmt::{self, Display, Formatter}};
 use serde::Deserialize;
 
 /// Contains the raw string representation of a chromosome name.
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Hash)]
 pub struct ChrName(pub String);
 
 impl Display for ChrName {

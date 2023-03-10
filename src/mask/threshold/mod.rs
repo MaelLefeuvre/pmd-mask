@@ -2,6 +2,9 @@ use std::{fmt::{self, Display, Formatter}, collections::HashMap};
 
 use crate::genome::{Orientation, Position};
 
+mod error;
+pub use error::MaskThresholdError;
+
 #[derive(Debug)]
 pub struct MaskThreshold { inner: HashMap<Orientation, Position> }
 
@@ -14,21 +17,23 @@ impl Default for MaskThreshold {
 
 }
 
+
 impl MaskThreshold {
-    
+
     pub fn set_threshold(&mut self, orientation: Orientation, position: Position) {
         self.inner.insert(orientation, position);
     }
 
-    pub fn validate(&self) -> Result<(), String> {
-        if self.inner.len() != 2 {
-            return Err("Invalid Threshold".to_string())
+    pub fn validate(&self) -> Result<(), MaskThresholdError> {
+        let expected_len = 2;
+        if self.inner.len() != expected_len {
+            return Err(MaskThresholdError::ValidateThresh{got: self.inner.len(), want: expected_len})
         }
         Ok(())
     }
 
-    pub fn get_threshold(&self, orientation: &Orientation) -> &Position {
-        self.inner.get(orientation).unwrap()
+    pub fn get_threshold(&self, orientation: &Orientation) -> Option<&Position> {
+        self.inner.get(orientation)
     }
 }
 

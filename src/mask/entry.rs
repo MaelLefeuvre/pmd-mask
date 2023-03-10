@@ -2,7 +2,7 @@ use std::fmt::{self, Display, Formatter};
 
 use crate::genome::{ChrName, Strand};
 
-#[derive(Debug, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct MaskEntry {
     pub chromosome: ChrName,
     pub strand    : Strand

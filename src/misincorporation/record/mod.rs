@@ -4,7 +4,7 @@ use crate::genome::{ChrName, Orientation, Strand, Position};
 use serde::Deserialize;
 
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct MisincorporationRecord {
     #[serde(rename(deserialize = "Chr"))] pub chromosome: ChrName,
     #[serde(rename(deserialize = "End"))] pub end       : Orientation,
