@@ -18,13 +18,15 @@ mod misincorporation;
 use misincorporation::Misincorporations;
 
 mod genome;
-use genome::{ChrName, Orientation, Strand};
+use genome::{Orientation};
 
 mod mask;
 use mask::{Masks, MaskEntry, MaskThreshold};
 
+mod error;
+pub use error::RuntimeError;
 
-use log::{info, warn, debug, trace};
+use log::{error, warn, info, debug, trace};
 
 
 
@@ -48,13 +50,7 @@ use log::{info, warn, debug, trace};
 // Ensure Provided reference matches the reference in the bam header.
 // [DONE] Warn user if misincorporation frequencies are Inf, Nan, or were computed from empty C.
 
-fn main() -> Result<()> {
-    // ---- Parse arguments
-    let args = Cli::parse();
-
-    // ---- initialize logger
-    Logger::init(if args.quiet {0} else {args.verbose + 1} );
-    debug!("Provided Command line Arguments:{args:#?}");
+fn run(args: &Cli) -> Result<()> {
 
     // ---- define threads:
     let threads = if args.threads == 0 {num_cpus::get() as u32 } else {args.threads};
@@ -66,12 +62,13 @@ fn main() -> Result<()> {
 
 
     // ---- Read Misincorporation file as a tsv file.
-    let mut threshold_positions = Misincorporations::from_path(args.misincorporation, args.threshold).unwrap();
+    let mut threshold_positions = Misincorporations::from_path(&args.misincorporation, args.threshold).unwrap();
 
     // ---- Validate misincorporation and issue warnings for any 'abnormal' frequency found.
-    let mut abnormal_frequencies = threshold_positions.extrude_invalid_frequencies().iter().fold(String::new(), |abnormal_freqs, pos| {
-        abnormal_freqs + &format!("{pos}\n")
-    });
+    let mut abnormal_frequencies = threshold_positions
+        .extrude_invalid_frequencies()
+        .iter()
+        .fold(String::new(), |abnormal_freqs, pos| abnormal_freqs + &format!("{pos}\n"));
     abnormal_frequencies.pop();
 
     if !abnormal_frequencies.is_empty() {
@@ -94,7 +91,7 @@ fn main() -> Result<()> {
     // ---- Open bam file
     let mut bam = match args.bam {
         Some(ref path) => bam::Reader::from_path(path),
-        None       => bam::Reader::from_stdin(),
+        None           => bam::Reader::from_stdin(),
     }?;
 
     // ---- IndexedRead: Does not seem to provide with any underlying async/multithread support either..
@@ -114,7 +111,7 @@ fn main() -> Result<()> {
 
 
     // ---- Define output format
-    let out_fmt = if let Some(fmt) = args.output_fmt {
+    let out_fmt = if let Some(ref fmt) = args.output_fmt {
         match fmt.to_ascii_uppercase().as_str() {
             "B" | "BAM" => bam::Format::Bam,
             "S" | "SAM" => bam::Format::Sam,
@@ -122,16 +119,16 @@ fn main() -> Result<()> {
             _ => panic!("Invalid output format"),
         }
     } else {
-        bam::Format::Sam // It'd be nice to set this to the same format as the input...
+        bam::Format::Sam // @TODO: It'd be nice to set this to the same format as the input... rust_htslib might have a way to access the header's magic number
     }; 
     
     // ---- Prepare Bam Writer
     let mut writer = match args.output {
-        Some(path) => bam::Writer::from_path(path, &header, out_fmt),
+        Some(ref path) => bam::Writer::from_path(path, &header, out_fmt),
         None       => bam::Writer::from_stdout(&header, out_fmt),
     }?;
     writer.set_compression_level(bam::CompressionLevel::Level(args.compress_level))?;
-    writer.set_reference(args.reference)?;
+    writer.set_reference(&args.reference)?;
     
     if let Some(ref pool) = thread_pool {
         writer.set_thread_pool(pool)?; 
@@ -147,9 +144,7 @@ fn main() -> Result<()> {
         // ---- Get chromosome and strand info of this record.
         // EXPENSIVE: converting tid to string.
         // @ TODO: map Misincorporation chromosome names to tid. once, before looping.
-        let chromosome = ChrName(str::from_utf8(header_view.tid2name(record.tid() as u32))?.to_string());
-        let strand = record.strand().strand_symbol().parse::<Strand>()?;
-        let current_record = MaskEntry{chromosome, strand};
+        let current_record = MaskEntry::from_htslib_record(&header_view, &mut record).map_err(RuntimeError::ParseMask)?;
         
 
         // ---- Get relevant misincorporation frequency:
@@ -169,7 +164,7 @@ fn main() -> Result<()> {
         // ---- Get the reference's position
         let position = record.pos();
         let end = record.seq_len();
-        let reference = reference.fetch_seq(&current_record.chromosome.0, position as usize, position as usize + end - 1)?;
+        let reference = reference.fetch_seq(current_record.chromosome.inner(), position as usize, position as usize + end - 1)?;
 
         trace!("-----------------------");
         trace!("---- Inspecting record: {current_record} {position}");
@@ -183,8 +178,8 @@ fn main() -> Result<()> {
 
         // ---- Mask 5p' positions
         // Unwrap cause we have previously validated the struct. [Code smell]
-        let mask_5p_threshold = relevant_thresholds.get_threshold(&Orientation::FivePrime).unwrap().0;
-        'mask5p: for i in 0..mask_5p_threshold {
+        let mask_5p_threshold = relevant_thresholds.get_threshold(&Orientation::FivePrime).unwrap().inner();
+        'mask5p: for i in 0..mask_5p_threshold - 1 {
 
             // ---- Bail if our index has gone past the read length.
             if i >= record.seq_len() { break 'mask5p}
@@ -197,8 +192,8 @@ fn main() -> Result<()> {
 
         // ---- Mask 3p' positions
         // Unwrap cause we have previously validated the struct. [Code smell]
-        let mask_3p_threshold = relevant_thresholds.get_threshold(&Orientation::ThreePrime).unwrap().0;
-        'mask3p: for i in (record.seq_len().saturating_sub(mask_3p_threshold)..record.seq_len()).rev() {
+        let mask_3p_threshold = relevant_thresholds.get_threshold(&Orientation::ThreePrime).unwrap().inner();
+        'mask3p: for i in (record.seq_len().saturating_sub(mask_3p_threshold - 1)..record.seq_len()).rev() {
             // ---- Bail if our index has gone past the read length.
             if i == 0 { break 'mask3p }
             
@@ -219,4 +214,18 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn main() {
+    // ---- Parse arguments
+    let args = Cli::parse();
+
+    // ---- Initialize logger
+    Logger::init(if args.quiet {0} else {args.verbose + 1} );
+    debug!("Provided Command line Arguments:{args:#?}");
+
+    // ---- Run main process
+    if let Err(e) = run(&args) {
+        error!("{e}")
+    }
 }

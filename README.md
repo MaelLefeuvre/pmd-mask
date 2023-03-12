@@ -2,6 +2,9 @@
 
 Perform hard selective masking of ancient DNA deamination patterns, using the output misincorporation frequency estimates of [MapDamage](https://github.com/ginolhac/mapDamage.git).
 
+![Build](https://github.com/MaelLefeuvre/pmd-mask/workflows/Build/badge.svg)
+
+
 # Installation
 
 ## Dependencies
@@ -19,6 +22,11 @@ curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh
 1. Clone this repository
 ```Bash
 git clone git@github.com:MaelLefeuvre/pmd-mask.git
+```
+
+2. Run the test suite from the repository's root
+```Bash
+cd pmd-mask && cargo test
 ```
 
 2. Compile and install

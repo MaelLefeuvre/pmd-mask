@@ -1,5 +1,7 @@
 use std::{fmt::{self, Display, Formatter}, str::FromStr};
+
 use serde::Deserialize;
+use rust_htslib::bam::Record;
 
 mod error;
 pub use error::StrandError;
@@ -11,9 +13,20 @@ pub enum Strand {
     #[serde(rename = "-")] Reverse
 }
 
+
 impl Strand {
-    /// Return a string representation of this struct: `+` for reverse strands, `-` for forward strands.
-    pub fn symbol(&self) -> &str {
+
+    pub fn from_htslib_record(record: &mut Record) -> Result<Self, StrandError> {
+        record.strand()
+            .strand_symbol()
+            .parse::<Strand>()
+            .map_err(|e| StrandError::ParseFromHtsLib(Box::new(e)))
+    }
+}
+
+
+impl AsRef<str> for Strand {
+    fn as_ref(&self) -> &str {
         match self {
             Self::Forward => "+",
             Self::Reverse => "-",
@@ -21,9 +34,10 @@ impl Strand {
     }
 }
 
+
 impl Display for Strand {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.symbol().fmt(f)
+        self.as_ref().fmt(f)
     }
 }
 
@@ -52,4 +66,47 @@ impl FromStr for Strand {
 
         }
     }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use serde_test::{Token, assert_de_tokens};
+
+    #[test]
+    fn display() {
+        let forward = Strand::Forward;
+        let reverse = Strand::Reverse;
+
+        assert_eq!("+ ATCG\n- tagc", format!("{forward} ATCG\n{reverse} tagc"));
+        assert_eq!("+    ATCG\n-    tagc", format!("{forward: <5}ATCG\n{reverse: <5}tagc"));
+    }
+
+    #[test]
+    fn deserialize_forward() {
+        assert_de_tokens(&Strand::Forward, &[
+            Token::UnitVariant { name: "Strand", variant: "+" }
+        ])
+    }
+
+    #[test]
+    fn deserialise_reverse() {
+        assert_de_tokens(&Strand::Reverse, &[
+            Token::UnitVariant { name: "Strand", variant: "-" }
+        ])
+    }
+
+    #[test]
+    fn as_ref() {
+        assert_eq!(Strand::Forward.as_ref(), "+");
+        assert_eq!(Strand::Reverse.as_ref(), "-");
+    }
+
+    #[test]
+    fn from_str() {
+        assert_eq!(Strand::from_str("+"), Ok(Strand::Forward));
+        assert_eq!(Strand::from_str("-"), Ok(Strand::Reverse));
+        assert_eq!(Strand::from_str("*"), Err(StrandError::ParseStrand("*".to_string())));
+    }
+
 }

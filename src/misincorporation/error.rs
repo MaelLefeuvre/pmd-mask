@@ -5,5 +5,5 @@ pub enum MisincorporationsError {
     DeserializeRecord(usize, Box<dyn std::error::Error>),
 
     #[error("Failed to open {0}. Got {1}")]
-    OpenMisincorporationFile(String, #[source] csv::Error)
+    OpenFile(String, #[source] std::io::Error)
 }

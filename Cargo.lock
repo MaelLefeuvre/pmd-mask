@@ -630,7 +630,7 @@ checksum = "6ac9a59f73473f1b8d852421e59e64809f025994837ef743615c6d0c5b305160"
 
 [[package]]
 name = "pmd-mask"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -641,6 +641,7 @@ dependencies = [
  "num_cpus",
  "rust-htslib",
  "serde",
+ "serde_test",
  "thiserror",
 ]
 
@@ -795,6 +796,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "serde_test"
+version = "1.0.154"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf2d2d6cb2f0ae0ee570534adaa64db18d2f50cfa433c5afcbe3263f98cfb010"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

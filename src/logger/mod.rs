@@ -73,7 +73,7 @@ mod tests {
 
     #[test]
     fn log_level(){
-        Logger::init(0);
+        Logger::init(4);
         for level in 0..u8::MAX {
             Logger::set_level(level);
 
