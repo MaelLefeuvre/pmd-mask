@@ -19,3 +19,6 @@ edition = "2021"
   chrono      = "0.4"
   csv         = "1.2"
   num_cpus    = "1.15"
+
+[dev-dependencies]
+  serde_test = "1.0" 
