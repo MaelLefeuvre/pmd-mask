@@ -1,4 +1,4 @@
-name: Build
+name: MacOS
 
 on:
   push:
@@ -10,18 +10,10 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  Ubuntu:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    - name: Build
-      run: cargo build
-    - name: Run tests
-      run: cargo test --verbose
-  MacOS:
+  Build:
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Build
       run: cargo build
     - name: Run tests
