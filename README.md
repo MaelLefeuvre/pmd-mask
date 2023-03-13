@@ -1,7 +1,8 @@
 # PMD-mask
 
-Perform hard selective masking of ancient DNA deamination patterns, using the output misincorporation frequency estimates of [MapDamage](https://github.com/ginolhac/mapDamage.git).
-**Ubuntu:** ![Ubuntu](https://github.com/MaelLefeuvre/pmd-mask/actions/workflows/Ubuntu.yml/badge.svg) | **MacOS:** ![MacOS](https://github.com/MaelLefeuvre/pmd-mask/actions/workflows/MacOS.yml/badge.svg)
+Perform hard selective masking of ancient DNA deamination patterns, using the output misincorporation frequency estimates of [MapDamage](https://github.com/ginolhac/mapDamage.git).  
+
+[![Ubuntu](https://github.com/MaelLefeuvre/pmd-mask/actions/workflows/Ubuntu.yml/badge.svg)](https://github.com/MaelLefeuvre/pmd-mask/actions/workflows/Ubuntu.yml) [![MacOS](https://github.com/MaelLefeuvre/pmd-mask/actions/workflows/MacOS.yml/badge.svg)](https://github.com/MaelLefeuvre/pmd-mask/actions/workflows/MacOS.yml)
 
 
 # Installation
