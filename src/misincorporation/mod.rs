@@ -21,6 +21,14 @@ impl Deref for Misincorporations {
     }
 }
 
+
+impl FromIterator<MisincorporationRecord> for  Misincorporations {
+    fn from_iter<T: IntoIterator<Item = MisincorporationRecord>>(records: T) -> Self {
+        let inner = Vec::from_iter(records);
+        Self{inner}
+    }
+}
+
 impl Misincorporations {
     pub fn from_path(path: impl AsRef<Path>, threshold: f32) -> Result<Self, MisincorporationsError>{
         let file = File::open(&path)
@@ -58,12 +66,6 @@ impl Misincorporations {
             }
         }
         Ok(Self{ inner: threshold_positions }) 
-    }
-
-    #[cfg(test)]
-    pub fn from_iter(records: impl Iterator<Item = MisincorporationRecord>) -> Self {
-        let inner = Vec::from_iter(records);
-        Self{inner}
     }
 
     pub fn extrude_invalid_frequencies(&mut self) -> Vec<MisincorporationRecord> {

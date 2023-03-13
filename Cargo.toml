@@ -19,6 +19,9 @@ edition = "2021"
   chrono      = "0.4"
   csv         = "1.2"
   num_cpus    = "1.15"
-
+  atty        = "0.2"
 [dev-dependencies]
-  serde_test = "1.0" 
+  serde_test = "1.0"
+  assert_cmd = "2.0.8"
+  assert_fs  = "1.0.10"
+  predicates = "2.1.5"

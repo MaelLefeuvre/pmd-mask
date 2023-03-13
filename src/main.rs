@@ -1,12 +1,7 @@
-use std::str;
+use std::path::Path;
 
-use rust_htslib::{faidx, bam, bam::Read, tpool::ThreadPool};
-
-use num_cpus::{self};
-
-use clap::Parser;
-
-use anyhow::Result;
+use pmd_mask::apply_pmd_mask;
+use pmd_mask::mask::Masks;
 
 mod logger;
 use logger::Logger;
@@ -14,20 +9,12 @@ use logger::Logger;
 mod parser;
 use parser::Cli;
 
-mod misincorporation;
-use misincorporation::Misincorporations;
+use clap::Parser;
+use anyhow::Result;
+use rust_htslib::{faidx, bam, bam::Read, tpool::ThreadPool};
+use rust_htslib::errors::Error as HtslibError;
 
-mod genome;
-use genome::{Orientation};
-
-mod mask;
-use mask::{Masks, MaskEntry, MaskThreshold};
-
-mod error;
-pub use error::RuntimeError;
-
-use log::{error, warn, info, debug, trace};
-
+use log::{error, info, debug};
 
 
 // What's gonna happen:
@@ -50,169 +37,77 @@ use log::{error, warn, info, debug, trace};
 // Ensure Provided reference matches the reference in the bam header.
 // [DONE] Warn user if misincorporation frequencies are Inf, Nan, or were computed from empty C.
 
+
+/// Open a bam, from either a file, or from standard input.
+fn open_bam_reader(maybe_file: &Option<impl AsRef<Path>>) -> Result<bam::Reader, HtslibError> {
+    match maybe_file {
+        Some(ref path) => { info!("Opening {}", &path.as_ref().display()); bam::Reader::from_path(path) },
+        None           => { info!("Reading bam from standard input"); bam::Reader::from_stdin()},
+    }
+}
+
+
+/// Open a bam writer, either to a file, or to standard output.
+fn open_bam_writer<F>(maybe_file: &Option<F>, header: &bam::Header, output_fmt: bam::Format) -> Result<bam::Writer, HtslibError>
+where   F: AsRef<Path> 
+{
+    match maybe_file {
+        Some(ref path) => {info!("Writing output to {}", &path.as_ref().display()); bam::Writer::from_path(path, header, output_fmt)},
+        None           => {info!("Writing output to standard output"); bam::Writer::from_stdout(header, output_fmt)},
+    }
+}
+
+
 fn run(args: &Cli) -> Result<()> {
 
-    // ---- define threads:
-    let threads = if args.threads == 0 {num_cpus::get() as u32 } else {args.threads};
-    info!("Setting threads to {threads}");
-    let thread_pool = match threads {
-        1 => None,
-        _ => Some(ThreadPool::new(threads)?)
+    // ---- define threadpool if required:
+    let thread_pool = match args.threads {
+        1    => None ,
+        more => {debug!("Firing up threadpool..."); Some(ThreadPool::new(more)?) }
     };
 
-
-    // ---- Read Misincorporation file as a tsv file.
-    let mut threshold_positions = Misincorporations::from_path(&args.misincorporation, args.threshold).unwrap();
-
-    // ---- Validate misincorporation and issue warnings for any 'abnormal' frequency found.
-    let mut abnormal_frequencies = threshold_positions
-        .extrude_invalid_frequencies()
-        .iter()
-        .fold(String::new(), |abnormal_freqs, pos| abnormal_freqs + &format!("{pos}\n"));
-    abnormal_frequencies.pop();
-
-    if !abnormal_frequencies.is_empty() {
-        warn!("Found abnormal misincorporation frequencies (NaN, Infinite values, etc.). Masking will apply along the full length of the sequence for those:\n{abnormal_frequencies}");
-    }
-
-    debug!("Using the following positions as threshold for masking:\n{}",
-        threshold_positions.iter().fold(String::new(), |acc, val| {
-            acc + &format!("{val}\n")
-        })
-    );
-
-    // ---- Convert to a more usable format. This is a crash test after all...
-    let thresholds = Masks::try_from(&threshold_positions)?;
+    // ---- Read Misincorporation file as a tsv file and obtain a list of Masking threshold
+    //      for each chromosome, strand, and orientation.
+    info!("Computing masking positions from {}, using {} as threshold", &args.misincorporation.display(), args.threshold);
+    let thresholds = Masks::from_path(&args.misincorporation, args.threshold)?;
 
     // ---- Open Reference File
+    info!("Opening reference file {}", &args.reference.display());
     let reference = faidx::Reader::from_path(&args.reference)?;
 
-
     // ---- Open bam file
-    let mut bam = match args.bam {
-        Some(ref path) => bam::Reader::from_path(path),
-        None           => bam::Reader::from_stdin(),
-    }?;
-
+    let mut bam = open_bam_reader(&args.bam)?;
+    
     // ---- IndexedRead: Does not seem to provide with any underlying async/multithread support either..
     //let mut bam = bam::IndexedReader::from_path(args.bam.unwrap()).unwrap();
     //bam.fetch(bam::FetchDefinition::All);
-
-    bam.set_reference(&args.reference)?;
-    if let Some(ref pool) = thread_pool {
-        bam.set_thread_pool(pool)?;
-    };
     
 
-    // ---- Get header template
-    let header = bam::Header::from_template(bam.header());    
-    let header_view = bam::HeaderView::from_header(&header);
-    let mut record = bam::Record::new();
+    // ---- Define an output format if the user never specified it.
+    // @TODO: It'd be nice to set this to the same format as the input... rust_htslib might have a way to access the header's magic number
+    let output_format = args.output_fmt.unwrap_or(bam::Format::Sam);
 
-
-    // ---- Define output format
-    let out_fmt = if let Some(ref fmt) = args.output_fmt {
-        match fmt.to_ascii_uppercase().as_str() {
-            "B" | "BAM" => bam::Format::Bam,
-            "S" | "SAM" => bam::Format::Sam,
-            "C" | "CRAM" => bam::Format::Cram,
-            _ => panic!("Invalid output format"),
-        }
-    } else {
-        bam::Format::Sam // @TODO: It'd be nice to set this to the same format as the input... rust_htslib might have a way to access the header's magic number
-    }; 
-    
     // ---- Prepare Bam Writer
-    let mut writer = match args.output {
-        Some(ref path) => bam::Writer::from_path(path, &header, out_fmt),
-        None       => bam::Writer::from_stdout(&header, out_fmt),
-    }?;
+    let output_header = bam::Header::from_template(bam.header());
+    let mut writer = open_bam_writer(&args.output, &output_header, output_format)?;
+
+    // ---- Set output compression level for BAM/CRAM output.
     writer.set_compression_level(bam::CompressionLevel::Level(args.compress_level))?;
+
+    // ---- Set reference for CRAM files. 
+    bam.set_reference(&args.reference)?;
     writer.set_reference(&args.reference)?;
-    
-    if let Some(ref pool) = thread_pool {
-        writer.set_thread_pool(pool)?; 
-    }
 
+    // ---- Set thread pool if the user requested multi-threading
+    if let Some(ref pool) = thread_pool { 
+        debug!("Allocating threadpool to Reader and Writer");
+        bam.set_thread_pool(pool)?;
+        writer.set_thread_pool(pool)?;
+    };
 
-    let mut out_record    = bam::Record::new();
-    let default_threshold = MaskThreshold::default();
-    // ---- Loop along input records
-    while let Some(result) = bam.read(&mut record) {
-        result.unwrap();
-
-        // ---- Get chromosome and strand info of this record.
-        // EXPENSIVE: converting tid to string.
-        // @ TODO: map Misincorporation chromosome names to tid. once, before looping.
-        let current_record = MaskEntry::from_htslib_record(&header_view, &mut record).map_err(RuntimeError::ParseMask)?;
-        
-
-        // ---- Get relevant misincorporation frequency:
-        let relevant_thresholds = match thresholds.get(&current_record) {
-            Some(threshold) => threshold,
-            None => {
-                debug!("{current_record} Not found in threshold dictionary. Setting default threshold {default_threshold}");
-                &default_threshold
-            }
-        };
-
-        // EXPENSIVE: converting sequence to utf8
-        // @ TODO: use this?: static DECODE_BASE: &[u8] = b"=ACMGRSVTWYHKDBN";
-        let sequence = record.seq().as_bytes(); // That's an expensive operation.
-        let sequence = str::from_utf8(&sequence)?;
-
-        // ---- Get the reference's position
-        let position = record.pos();
-        let end = record.seq_len();
-        let reference = reference.fetch_seq(current_record.chromosome.inner(), position as usize, position as usize + end - 1)?;
-
-        trace!("-----------------------");
-        trace!("---- Inspecting record: {current_record} {position}");
-        trace!("Relevant thresholds: {relevant_thresholds}");
-
-        let mut new_seq   = record.seq().as_bytes(); // EXPENSIVE: Allocation
-        let mut new_quals = record.qual().to_vec();  // EXPENSIVE: Allocation
-
-        trace!("Reference: {}", std::str::from_utf8(reference)?);
-        trace!("Sequence : {sequence}");
-
-        // ---- Mask 5p' positions
-        // Unwrap cause we have previously validated the struct. [Code smell]
-        let mask_5p_threshold = relevant_thresholds.get_threshold(&Orientation::FivePrime).unwrap().inner();
-        'mask5p: for i in 0..mask_5p_threshold - 1 {
-
-            // ---- Bail if our index has gone past the read length.
-            if i >= record.seq_len() { break 'mask5p}
-
-            if reference[i] == b'C' {
-                new_seq[i] = b'N';
-                new_quals[i] = 0;
-            }
-        }
-
-        // ---- Mask 3p' positions
-        // Unwrap cause we have previously validated the struct. [Code smell]
-        let mask_3p_threshold = relevant_thresholds.get_threshold(&Orientation::ThreePrime).unwrap().inner();
-        'mask3p: for i in (record.seq_len().saturating_sub(mask_3p_threshold - 1)..record.seq_len()).rev() {
-            // ---- Bail if our index has gone past the read length.
-            if i == 0 { break 'mask3p }
-            
-            if reference[i] == b'G' {
-                new_seq[i] = b'N';
-                new_quals[i] = 0;
-            }
-
-        }
-
-        // SAFETY: samtools performs UTF8 sanity checks on the raw sequence. So we're ok.
-        trace!("Masked   : {}", unsafe{ std::str::from_utf8_unchecked(&new_seq) });
-
-        // ---- Flush tampered record to the output.
-        record.clone_into(&mut out_record);
-        out_record.set(record.qname(), Some(&record.cigar().take()), &new_seq, &new_quals);
-        writer.write(&out_record)?;
-    }
-
+    info!("Applying PMD-masking...");
+    apply_pmd_mask(&mut bam, &reference, &thresholds, &mut writer)?;
+    info!("Done");
     Ok(())
 }
 
@@ -222,6 +117,7 @@ fn main() {
 
     // ---- Initialize logger
     Logger::init(if args.quiet {0} else {args.verbose + 1} );
+
     debug!("Provided Command line Arguments:{args:#?}");
 
     // ---- Run main process

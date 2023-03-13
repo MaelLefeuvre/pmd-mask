@@ -51,12 +51,17 @@ impl FromStr for Strand {
     /// 
     /// will return a [`StrandError::ParseStrand`] error upon encountering any character that is neither '+' nor '-'
     /// ```
+    /// # use std::str::FromStr;
+    /// # use pmd_mask::genome::{Strand, StrandError};
+    /// 
     /// let forward_strand = "+".parse::<Strand>();
     /// assert_eq!(forward_strand, Ok(Strand::Forward));
+    /// 
     /// let reverse_strand = Strand::from_str("-");
     /// assert_eq!(reverse_strand, Ok(Strand::Reverse));
+    /// 
     /// let strange_strand = "x".parse::<Strand>();
-    /// assert_eq!(strange_strand, StrandError::ParseStrand)
+    /// assert!(strange_strand.is_err())
     /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {

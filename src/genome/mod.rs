@@ -8,3 +8,4 @@ pub use orientation::Orientation;
 
 mod strand;
 pub use strand::Strand;
+pub use strand::StrandError;
