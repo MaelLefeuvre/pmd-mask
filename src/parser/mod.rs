@@ -1,6 +1,6 @@
 use std::{path::PathBuf};
-
 use clap::{Parser, ArgAction, ColorChoice};
+use num_cpus::{self};
 
 
 /// pmd-mask: Perform hard selective masking of ancient DNA deamination patterns, using the output misincorporation frequency estimates of MapDamage (see: https://github.com/ginolhac/mapDamage.git).
@@ -33,8 +33,8 @@ pub struct Cli {
     /// Output format. (SAM|BAM|CRAM). 
     /// 
     /// If unspecified: Will output to SAM if stdout is targeted. Or use the original input format.
-    #[arg(short='O', long, required(false))]
-    pub output_fmt: Option<String>,
+    #[arg(short='O', long, required(false), value_parser(parse_output_fmt))]
+    pub output_fmt: Option<bam::Format>,
 
     /// Output compression level. 
     /// 
@@ -91,7 +91,88 @@ pub struct Cli {
     ///     - If your output is in BAM/CRAM format, set this value to your liking. Note that anything greater than 8 threads is rarely beneficial for compressing bam files., especially for low coverage samples.
     /// 
     /// 
-    #[clap(short='@', long, default_value("1"))]
+    #[clap(short='@', long, default_value("1"), value_parser(parse_threads))]
     pub threads: u32
+}
+
+use rust_htslib::bam;
+
+use log::info;
+
+use thiserror::Error;
+
+#[derive(Debug, Error, PartialEq)]
+pub enum CliError {
+    #[error("Accepted values: 'Sam|Bam|Cram'")]
+    InvalidBamOutputFmt,
+
+    #[error("The provided value must either be 0, or a non negative integer. Got {0}")]
+    InvalidThreadValue(#[source] std::num::ParseIntError),
+}
+
+fn parse_output_fmt(s: &str) -> Result<bam::Format, CliError> {
+    match s.to_ascii_uppercase().as_str() {
+        "S" | "SAM"  => Ok(bam::Format::Sam),
+        "B" | "BAM"  => Ok(bam::Format::Bam),
+        "C" | "CRAM" => Ok(bam::Format::Cram),
+        _ => Err(CliError::InvalidBamOutputFmt),
+    }
+}
+
+fn parse_threads(s: &str) -> Result<u32, CliError> {
+    Ok(match s.parse::<u32>().map_err(CliError::InvalidThreadValue)? {
+        0 => {
+            let available_cores = num_cpus::get() as u32;
+            info!("Setting threadpool to all available cores ({available_cores})");
+            available_cores 
+        }
+        other => {
+            match other {
+                1    => info!("Requesting a single thread for computation"),
+                more => info!("Setting threadpool to {more} additional worker threads."),
+            }
+            other
+        }
+    })
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn threads_parser() {
+
+        // 0 means all cores
+        assert_eq!(parse_threads("0"), Ok(num_cpus::get() as u32) ) ;
+
+        // 1..u32::MAX means the provided number
+        for n in 1..256 {
+            assert_eq!(parse_threads(n.to_string().as_str()), Ok(n) ) ;
+        }
+
+        // Negative values and such are considered errors.
+        for n in -256..0 {
+            assert!(parse_threads(n.to_string().as_str()).is_err())
+        }
+    }
+
+    #[test]
+    fn output_format_parser() {
+
+        for sam in ["SAM", "Sam", "sam", "S", "s"] {
+            assert!(matches!(parse_output_fmt(sam), Ok(bam::Format::Sam)));
+        }
+        for bam in ["BAM", "Bam", "bam", "B", "b"] {
+            assert!(matches!(parse_output_fmt(bam), Ok(bam::Format::Bam)));
+        }
+        
+        for cram in ["CRAM", "Cram", "cram", "C", "c"] {
+            assert!(matches!(parse_output_fmt(cram), Ok(bam::Format::Cram)));
+        }
+
+        for invalid  in ["CRAME", "BLAM", "Same", "vam", "v", "1", "2", "3", "ba", "sa", "Cra"] {
+            assert!(parse_output_fmt(invalid).is_err())
+        }
+    }
 }
 

@@ -1,5 +1,7 @@
 use std::fmt::{self, Display, Formatter};
 
+//use genome::{ChrName, Strand};
+
 use crate::genome::{ChrName, Strand};
 
 use rust_htslib::bam::{HeaderView, Record};
@@ -29,11 +31,13 @@ impl MaskEntry {
     }
 }
 
+ 
 #[cfg(test)]
-mod test {
+pub mod dummy {
     use super::*;
-    use rust_htslib::bam::header::{Header, HeaderRecord};
+    use rust_htslib::bam::{Header, header::HeaderRecord};
 
+    /// Generates a dummy bam record and header, using the provided Strand and position.
     pub fn dummy_bam(strand: Strand, pos: usize) -> (Header, Record){
         let mut header = Header::new();
         let mut chr_record = HeaderRecord::new("SQ".as_bytes());
@@ -53,7 +57,13 @@ mod test {
 
         (header.clone(), record.clone())
     }
+}
 
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use super::dummy::dummy_bam;
     #[test]
     fn from_htslib_record() {
         let (header, mut record) = dummy_bam(Strand::Forward, 10_000);

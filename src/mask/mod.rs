@@ -1,12 +1,14 @@
 use std::collections::HashMap;
+use std::fs::File;
+use std::path::Path;
 
-use crate::misincorporation::Misincorporations;
+use log::{warn, debug, trace};
 
-use log::{trace};
-
-mod entry;
+pub mod entry;
 pub use entry::MaskEntry;
 pub use entry::MaskEntryError;
+
+#[cfg(test)] pub use entry::dummy;
 
 mod threshold;
 pub use threshold::MaskThreshold;
@@ -14,6 +16,7 @@ pub use threshold::MaskThreshold;
 mod error;
 pub use error::MasksError;
 
+use crate::misincorporation::Misincorporations;
 
 /// A Hash collection of Masking thresholds, mapped according to their respective MaskEntries
 /// (i.e. Chromosome name and strand information.)
@@ -40,7 +43,39 @@ impl TryFrom<&Misincorporations> for Masks {
     }
 }
 
+
 impl Masks {
+
+    pub fn from_path(misincorporations: impl AsRef<Path>, threshold: f32) -> Result<Self, MasksError> {
+        let file = File::open(&misincorporations).unwrap();
+            //.map_err(|e| MisincorporationsError::OpenFile(path.as_ref().display().to_string(), e))?;
+        Self::from_reader(file, threshold)
+    }
+
+    pub fn from_reader<R: std::io::Read>(misincorporations: R, threshold: f32) -> Result<Self, MasksError> {
+
+        let mut threshold_positions = Misincorporations::from_reader(misincorporations, threshold).unwrap();
+
+        // ---- Validate misincorporation and issue warnings for any 'abnormal' frequency found.
+        let mut abnormal_frequencies = threshold_positions
+            .extrude_invalid_frequencies()
+            .iter()
+            .fold(String::new(), |abnormal_freqs, pos| abnormal_freqs + &format!("{pos}\n"));
+        abnormal_frequencies.pop();
+
+        if !abnormal_frequencies.is_empty() {
+            warn!("Found abnormal misincorporation frequencies (NaN, Infinite values, etc.). Masking will apply along the full length of the sequence for those:\n{abnormal_frequencies}");
+        }
+
+        debug!("Using the following positions as threshold for masking:\n{}",
+            threshold_positions.iter().fold(String::new(), |acc, val| {
+                acc + &format!("{val}\n")
+            })
+        );
+
+        Ok(Masks::try_from(&threshold_positions).unwrap())
+    }
+
     pub fn get(&self, entry: &MaskEntry) -> Option<&MaskThreshold> {
         self.inner.get(entry)
     }
