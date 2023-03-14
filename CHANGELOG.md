@@ -1,3 +1,15 @@
+# version 0.1.3 (2023-03-14)
+## Features
+**A More trustworthy codebase :** ~91.86% line coverage at this point.
+- Basic suite of Unit tests (PRs #4 #6 #9)
+- Basic suite of integration tests (PRs #6 and #9)
+- Basic Continuous Integration workflow for Ubuntu and MacOS (PRs #5 #7)
+- Some very basic doctests within certain user libraries. 
+- Better separation between libraries and the main logic.
+
+## Known bugs
+- [Uncaught rust_htslib exception when the specified --reference points to an invalid reference file.](https://github.com/MaelLefeuvre/pmd-mask/issues/8)
+
 # version 0.1.2 (2023-03-10)
 ## Features
  - `--help` is now a bit more verbose.

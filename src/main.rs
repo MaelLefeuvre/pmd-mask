@@ -1,7 +1,34 @@
+//! # `pmd-mask` Main binary.
+//! 
+//! # What `pmd-mask` needs:
+//! 1. A sam/bam/cram file
+//! 2. A `misincorporation.txt` file, obtained from the same input bam file, using MapDamage
+//! 3. A reference genome
+//! # What `pmd-mask` does:
+//! 
+//! 1. Opens a MapDamage misincorporation file and maps each relative position to a given probability of misincorporation.
+//! 
+//! 2. Within this misincorporation file, finds the relative position at which the probability of either C->T (forward) or 
+//!    G->A (reverse) misincorporation is lower than the user-provided threshold (the default is 1%)
+//! 
+//!    - This relative position is defined in base pairs, starting from the relevant read end, (i.e: we start counting from
+//!      the `5p` end for `C>T` misincorporations | `3p` end, for `G>A` misincorporations. 
+//! 
+//! 3. Open and read through the input bam file. 
+//!    For each line of the bam file, look through the sequence read.
+//!    - starting at the 5p end, if at any point there is a C in the **reference** sequence AND we've not attained the treshold, mask it.
+//!    - starting at the 3p end, if at any point there is a G in the **reference** sequence AND we've not attained the treshold, mask it.
+//! 
+//!    By masking, we mean *hard masking*. i.e. downscale the Phred base-quality to 0, and set the nucleotide value to 'N'.
+//! 
+//! 4. Stream the masked sequences to either an output file, or the standard output. The output format and compression level 
+//!    can be specified by the used. 
+
 use std::path::Path;
 
 use pmd_mask::apply_pmd_mask;
 use pmd_mask::mask::Masks;
+use pmd_mask::error::RuntimeError;
 
 mod logger;
 use logger::Logger;
@@ -17,25 +44,6 @@ use rust_htslib::errors::Error as HtslibError;
 use log::{error, info, debug};
 
 
-// What's gonna happen:
-// 1. Open a misincorporation file and map each relative position to a given probability.
-// 2. Within this misincorporation file, find the relative position at which the probability of
-//    either C->T (forward) or G->A (reverse) misincorporation is lower than the user-provided threshold
-// 3. Open and read a bam file. 
-//    For each line of the bam file, look through the sequence read.
-//    - for forward strands, if at any point there is a C in the **reference** sequence AND we've not attained the treshold, mask it.
-//    - for reverse strands, if at any point there is a G in the **reference** sequence AND we've not attained the treshold, mask it.
-
-// ---- Clap:
-// - input (maybe stdin)
-// - misincorporation-file
-// - reference
-// - treshold
-// - output (maybe stdout)
-
-// ---- Sanity checks:
-// Ensure Provided reference matches the reference in the bam header.
-// [DONE] Warn user if misincorporation frequencies are Inf, Nan, or were computed from empty C.
 
 
 /// Open a bam, from either a file, or from standard input.
@@ -58,7 +66,18 @@ where   F: AsRef<Path>
 }
 
 
-fn run(args: &Cli) -> Result<()> {
+fn run(args: &Cli) -> Result<(), RuntimeError> {
+
+    // ---- Ensure Input bam and output bam are not the same.
+    if let Some(ref input_file) = args.bam{
+        if let Some(ref output_file) = args.output {
+            if *input_file == *output_file {
+                return Err(RuntimeError::InputIsOutput)
+            }
+        }
+    }
+
+
 
     // ---- define threadpool if required:
     let thread_pool = match args.threads {
@@ -122,6 +141,7 @@ fn main() {
 
     // ---- Run main process
     if let Err(e) = run(&args) {
-        error!("{e}")
+        error!("{e}");
+        std::process::exit(1)
     }
 }
