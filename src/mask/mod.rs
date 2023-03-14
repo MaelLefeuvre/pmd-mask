@@ -83,7 +83,7 @@ impl Masks {
     // ---- Validate thresholds: Each record must contain a hashmap w/ two values (one for 3p, the other for 5p)
     pub fn validate(&self) -> Result<(), MasksError> {
         for (entry, threshold) in self.inner.iter() {
-            trace!("Validating {entry:?} {threshold:?}");
+            trace!("Validating {entry} {threshold}");
             threshold.validate().map_err(|e|MasksError::ValidateThresholds(entry.clone(), e))?
         };
         Ok(())

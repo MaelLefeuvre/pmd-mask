@@ -69,3 +69,24 @@ pmd-mask --reference data/GRCh37/Homo_sapiens.GRCh37.dna.primary_assemby.fa --mi
 samtools view -h ./MT23/MT23.srt.rmdup.rescaled.bam {1..22} | pmd-mask -f ./hs37d5.fa -m ./MT23/misincorporation.txt -Ob --threshold 0.02 --quiet | samtools mpileup -RB -q25 -Q25 -f ./hs37d5.fa.gz -l ./v52.2_1240K_public.bed - | grups pwd-from-stin --samples 0 --self-comparison --sample-name MT23
 ```
 
+# Development
+## Getting code coverage metrics for the pmd-mask codebase
+Install [llvm-cov](https://github.com/taiki-e/cargo-llvm-cov) 
+```Bash
+cargo install llvm-cov
+```
+
+Run `llvm-cov`
+```Bash
+# Using shell output. either stdout or pager
+cargo llvm-cov --workspace --all 
+# or 
+cargo llvm-cov --worskpace --all --text | less -R
+
+# Html report
+cargo llvm-cov --workspace --all --open
+
+# lcov format
+cargo llvm-cov --workspace --all --lcov > lcov.info
+```
+

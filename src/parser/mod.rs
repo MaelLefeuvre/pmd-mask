@@ -1,6 +1,54 @@
-use std::{path::PathBuf};
+use std::path::PathBuf;
+
+mod error;
+use error::CliError;
+
 use clap::{Parser, ArgAction, ColorChoice};
 use num_cpus::{self};
+use rust_htslib::bam;
+use log::info;
+
+
+/// Convert the user provided output format string to a htslib-friendly enum
+/// 
+/// # Behaviour:
+///
+/// - Accepts initials or fully-specified, case-insensitive file formats for BAM, SAM, CRAM
+/// 
+/// i.e: b, B, Bam, BAM, bam, BaM, bAm, etc. will work., 
+/// d, V, vam, BA,  bame, BLAM, abam, etc. will return an error. 
+/// 
+/// 
+/// # Errors
+/// returns a [`CliError::InvalidBamOutputFmt`] in case the function fails to pattern match the provided string with a [`bam::Format`] enum variant.
+fn parse_output_fmt(s: &str) -> Result<bam::Format, CliError> {
+    match s.to_ascii_uppercase().as_str() {
+        "S" | "SAM"  => Ok(bam::Format::Sam),
+        "B" | "BAM"  => Ok(bam::Format::Bam),
+        "C" | "CRAM" => Ok(bam::Format::Cram),
+        _ => Err(CliError::InvalidBamOutputFmt),
+    }
+}
+
+
+// parses the user-provided string into a u32, specifying the number of allocated
+// 
+fn parse_threads(s: &str) -> Result<u32, CliError> {
+    Ok(match s.parse::<u32>().map_err(CliError::InvalidThreadValue)? {
+        0 => {
+            let available_cores = num_cpus::get() as u32;
+            info!("Setting threadpool to all available cores ({available_cores})");
+            available_cores 
+        }
+        other => {
+            match other {
+                1    => info!("Requesting a single thread for computation"),
+                more => info!("Setting threadpool to {more} additional worker threads."),
+            }
+            other
+        }
+    })
+}
 
 
 /// pmd-mask: Perform hard selective masking of ancient DNA deamination patterns, using the output misincorporation frequency estimates of MapDamage (see: https://github.com/ginolhac/mapDamage.git).
@@ -95,46 +143,8 @@ pub struct Cli {
     pub threads: u32
 }
 
-use rust_htslib::bam;
 
-use log::info;
 
-use thiserror::Error;
-
-#[derive(Debug, Error, PartialEq)]
-pub enum CliError {
-    #[error("Accepted values: 'Sam|Bam|Cram'")]
-    InvalidBamOutputFmt,
-
-    #[error("The provided value must either be 0, or a non negative integer. Got {0}")]
-    InvalidThreadValue(#[source] std::num::ParseIntError),
-}
-
-fn parse_output_fmt(s: &str) -> Result<bam::Format, CliError> {
-    match s.to_ascii_uppercase().as_str() {
-        "S" | "SAM"  => Ok(bam::Format::Sam),
-        "B" | "BAM"  => Ok(bam::Format::Bam),
-        "C" | "CRAM" => Ok(bam::Format::Cram),
-        _ => Err(CliError::InvalidBamOutputFmt),
-    }
-}
-
-fn parse_threads(s: &str) -> Result<u32, CliError> {
-    Ok(match s.parse::<u32>().map_err(CliError::InvalidThreadValue)? {
-        0 => {
-            let available_cores = num_cpus::get() as u32;
-            info!("Setting threadpool to all available cores ({available_cores})");
-            available_cores 
-        }
-        other => {
-            match other {
-                1    => info!("Requesting a single thread for computation"),
-                more => info!("Setting threadpool to {more} additional worker threads."),
-            }
-            other
-        }
-    })
-}
 
 #[cfg(test)]
 mod test {
@@ -143,11 +153,17 @@ mod test {
     fn threads_parser() {
 
         // 0 means all cores
-        assert_eq!(parse_threads("0"), Ok(num_cpus::get() as u32) ) ;
+        match parse_threads("0") {
+            Ok(nprocs) => assert!(nprocs == num_cpus::get() as u32),
+            Err(e)     => panic!("{e}")
+        }
 
         // 1..u32::MAX means the provided number
         for n in 1..256 {
-            assert_eq!(parse_threads(n.to_string().as_str()), Ok(n) ) ;
+            match parse_threads(n.to_string().as_str()) {
+                Ok(nprocs) => assert!(nprocs == n),
+                Err(e)     => panic!("{e}")
+            }
         }
 
         // Negative values and such are considered errors.
@@ -174,5 +190,7 @@ mod test {
             assert!(parse_output_fmt(invalid).is_err())
         }
     }
+
+
 }
 
