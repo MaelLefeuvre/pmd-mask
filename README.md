@@ -70,6 +70,31 @@ samtools view -h ./MT23/MT23.srt.rmdup.rescaled.bam {1..22} | pmd-mask -f ./hs37
 ```
 
 # Development
+
+## Running benchmarks and regression testing
+
+Listing benchmarrks: 
+```Bash
+cargo bench -- --list 2>&1 | grep "bench$"
+```
+
+Running a quick bench using all benchmark files (3s warmup time, followed by 5s measurement time)
+```Bash
+cargo bench
+```
+
+An HTML report should be available in the `target/criterion` subdirectory
+```Bash
+firefox ./target/criterion/report/index.html
+```
+
+Running a specific bench: 
+```Bash
+cargo bench --bench apply_pmd_mask -- --warm-up-time 10 --measurement-time 60
+```
+
+
+
 ## Getting code coverage metrics for the pmd-mask codebase
 Install [llvm-cov](https://github.com/taiki-e/cargo-llvm-cov) 
 ```Bash
@@ -88,5 +113,5 @@ cargo llvm-cov --workspace --all --open
 
 # lcov format
 cargo llvm-cov --workspace --all --lcov > lcov.info
-```
+```
 
