@@ -14,32 +14,37 @@ use anyhow::Result;
 use rust_htslib::{faidx, bam};
 use log::{debug, trace};
 
+
+use rust_htslib::bam::ext::BamRecordExtensions;
+
+
 #[inline]
-fn mask_sequence(range: Range<usize>, reference: &[u8], seq: &mut [u8], quals: &mut [u8], target_nucleotide: u8) {
-    'mask: for i in range {
-        if i >= seq.len() { break 'mask}
-        if reference[i] == target_nucleotide {
-            seq[i] = b'N';
-            quals[i] = 0;
+fn mask_sequence(range: Range<usize>, reference: &[u8], seq: &mut [u8], quals: &mut [u8], target_nucleotide: u8, positions: &[[usize; 2]]) {
+    'mask: for [readpos, refpos] in positions.iter().copied().skip(range.start).take_while(|[readpos, _]| *readpos < range.end ) {
+        if readpos >= seq.len() { break 'mask}
+        if reference[refpos] == target_nucleotide {
+            seq[readpos] = b'N';
+            quals[readpos] = 0;
         }
     }
 }
 
 #[inline]
-fn mask_5p(thresholds: &MaskThreshold, reference: &[u8], seq: &mut [u8], quals: &mut [u8]) {
+fn mask_5p(thresholds: &MaskThreshold, reference: &[u8], seq: &mut [u8], quals: &mut [u8], positions: &[[usize; 2]]) {
     // Unwrap cause we have previously validated the struct. [Code smell]
     let mask_5p_threshold = thresholds.get_threshold(&Orientation::FivePrime).unwrap().inner();
     let mask_5p_range     = 0..mask_5p_threshold -1;
-    mask_sequence(mask_5p_range, reference, seq, quals, b'C');
+    mask_sequence(mask_5p_range, reference, seq, quals, b'C', positions);
 }
 
 #[inline]
-fn mask_3p(thresholds: &MaskThreshold, reference: &[u8], seq: &mut [u8], quals: &mut [u8]) {
+fn mask_3p(thresholds: &MaskThreshold, reference: &[u8], seq: &mut [u8], quals: &mut [u8], positions: &[[usize; 2]]) {
     // Unwrap cause we have previously validated the struct. [Code smell]
     let mask_3p_threshold = thresholds.get_threshold(&Orientation::ThreePrime).unwrap().inner();
     let mask_3p_range     = seq.len().saturating_sub(mask_3p_threshold-1)..seq.len();
-    mask_sequence(mask_3p_range, reference, seq, quals, b'G');
+    mask_sequence(mask_3p_range, reference, seq, quals, b'G', positions);
 }
+
 
 #[inline]
 pub fn apply_pmd_mask<B>(bam: &mut B, reference: &faidx::Reader, masks: &Masks, writer: &mut bam::Writer) -> Result<(), RuntimeError>
@@ -71,15 +76,16 @@ where   B: bam::Read,
             }
         };
 
-        // ---- Get the reference's position
-        let position = bam_record.pos();
-        let end = bam_record.seq_len();
-        let reference = reference.fetch_seq(current_record.chromosome.inner(), position as usize, position as usize + end - 1)?;
 
+        // ---- Get the reference's position         
+        let reference = reference.fetch_seq(current_record.chromosome.inner(), bam_record.reference_start() as usize, bam_record.reference_end() as usize -1 ) ?;
+
+        let aligned_pos = bam_record.aligned_pairs().map(|[readpos, refpos]| [readpos as usize, (refpos - bam_record.pos()) as usize]).collect::<Vec<[usize; 2]>>();
+    
         trace!("-----------------------");
-        trace!("---- Inspecting record: {current_record} {position}");
+        trace!("---- Inspecting record: {current_record} {}", bam_record.pos());
         trace!("Relevant thresholds: {relevant_thresholds}");
-
+        trace!("CIGAR              : {}", bam_record.cigar());
         let mut new_seq   = bam_record.seq().as_bytes(); // EXPENSIVE: Allocation
         let mut new_quals = bam_record.qual().to_vec();  // EXPENSIVE: Allocation
 
@@ -92,10 +98,10 @@ where   B: bam::Read,
         trace!("Sequence : {}", unsafe { str::from_utf8_unchecked(&sequence) });
 
         // ---- Mask 5p' positions
-        mask_5p(relevant_thresholds, reference, &mut new_seq, &mut new_quals);
+        mask_5p(relevant_thresholds, reference, &mut new_seq, &mut new_quals, &aligned_pos);
 
         // ---- Mask 3p' positions
-        mask_3p(relevant_thresholds, reference, &mut new_seq, &mut new_quals);
+        mask_3p(relevant_thresholds, reference, &mut new_seq, &mut new_quals, &aligned_pos);
 
         // SAFETY: samtools performs UTF8 sanity checks on the raw sequence. So we're ok.
         trace!("Masked   : {}", unsafe{ std::str::from_utf8_unchecked(&new_seq) });
@@ -108,6 +114,20 @@ where   B: bam::Read,
     Ok(())
 }
 
+
+/// Test examples to implement for INDELs
+///
+/// Relevant thresholds: (5p: 5bp) (3p: 6bp)
+/// CIGAR              : 48M1I14M
+/// Reference: CCAGCCTGGGCGACAGAGCAAGACTCTGTCTCAAAAAAAAAAAAAAAA TGGTGGGGTCGGGG
+/// Sequence : CTAGCCTGGGCGACAGAGCAAGACTCTGTCTCAAAAAAAAAAAAAAAAGGGGTGGGGCCGGGG
+/// Masked   : NNAGCCTGGGCGACAGAGCAAGACTCTGTCTCAAAAAAAAAAAAAAAAGGGGTGGGGCCNNNN
+/// 
+/// Relevant thresholds: (5p: 5bp) (3p: 6bp)
+/// CIGAR              : 63M1D37M
+/// Reference: TGTAGTGAGCTGAGATCGTGCCATTGCACTCCAGCCTGGGCAACAGGAGTGAAACTCTATCTCAAAAAAAAAAAAAAATTAAACAAAAACAAACCTGCCTC
+/// Sequence : TGTAGTGAGCTGAGATCGTGCCATTGCACTCCAGCCTGGGCAACAGGAGTGAAACTCTATCTC AAAAAAAAAAAAAATTAAACAAAAACAAACCTGCCTC
+/// Masked   : TGTAGTGAGCTGAGATCGTGCCATTGCACTCCAGCCTGGGCAACAGGAGTGAAACTCTATCTC AAAAAAAAAAAAAATTAAACAAAAACAAACCTNCCTC
 
 #[cfg(test)]
 mod test {
@@ -136,10 +156,48 @@ mod test {
         }};
     }
     
+
+
+    #[allow(dead_code)]
+    enum Cigar{
+        Match(usize),
+        Deletion(usize),
+        Insertion(usize)
+    }
+
+
+    fn cigar2paired_indices(cigar: &[Cigar]) -> Vec<[usize; 2]> {
+        use Cigar::*;
+        let mut paired_indices: Vec<[usize; 2]> = Vec::new();
+
+        macro_rules! push_pair {
+            ($readincrement:expr, $refincrement:expr) => {
+                [paired_indices.last().unwrap()[0] + $readincrement, paired_indices.last().unwrap()[1] + $refincrement]
+            };
+
+            ($times:expr, $readincrement:expr, $refincrement:expr) => {
+                for _ in 0..$times {
+                    paired_indices.push(if paired_indices.is_empty() { [1-$readincrement, 1-$refincrement] } else { push_pair!($refincrement, $readincrement)});
+                }
+            };
+        }
+
+        for cigarid in cigar {
+            match cigarid {
+                Match(len)     => push_pair!(*len, 1, 1) ,
+                Insertion(len) =>  push_pair!(*len, 0, 1),
+                Deletion(len)  =>  push_pair!(*len, 1, 0)
+            }
+        }
+        paired_indices
+    }
+
+
+
     /// 1. Takes an input reference, nucleotide sequence and PHRED qualities in their string representation,
     /// 2. Convert these to bytes,
     /// 2. Applies masking on these vector using [`mask_5p`] and [`mask_3p`]
-    fn mask_and_validate(threshold_len: usize, reference: &str, seq: &str, quals: &str) -> Result<(String, String)> {
+    fn mask_and_validate(threshold_len: usize, reference: &str, seq: &str, quals: &str, cigar: &[Cigar]) -> Result<(String, String)> {
         let reference = reference.as_bytes();
         let mut seq   = seq.as_bytes().to_vec();
         let mut quals = quals.as_bytes().iter().map(|b| b - 33).collect::<Vec<u8>>();
@@ -152,8 +210,9 @@ mod test {
         let invalid_mask_err = |i| Err(anyhow!("nucleotide {i} has been masked, but should not have been"));
 
         // Mask 5p
+        let pair_indices = cigar2paired_indices(cigar);
         println!("---- 5p masking with threshold set at {threshold_len}");
-        mask_5p(&threshold, reference, &mut seq, &mut quals);
+        mask_5p(&threshold, reference, &mut seq, &mut quals, &pair_indices);
         print_align!(reference, seq, quals);
 
         // ---- Validate 5p masking.
@@ -177,7 +236,7 @@ mod test {
 
         // Mask 3p
         println!("---- 3p masking with threshold set at {threshold_len}");
-        mask_3p(&threshold, reference, &mut seq, &mut quals);
+        mask_3p(&threshold, reference, &mut seq, &mut quals, &pair_indices);
         print_align!(reference, seq, quals);
 
         // ---- Validate 3p masking
@@ -214,8 +273,9 @@ mod test {
         let reference = "GCTCCTATTAAATCCCAAACATATAACTGAACTCCTCACACCCAATTGGACGGGGGGGGG";
         let seq       = "GCTCCTATTAAATCCCAAACATATAACTGAACTCCTCACACCCAATTGGACCAATCTATG";
         let quals     = "AAAAAEEEEEEEEEEEEEEEEEEEJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ";
+        let cigar     = vec![Cigar::Match(seq.len())];
         for i in 2..reference.len() {
-            match mask_and_validate(i, reference, seq, quals) {
+            match mask_and_validate(i, reference, seq, quals, &cigar) {
                 Err(e) => panic!("{e}"),
                 Ok((new_seq, new_quals)) => {
                     assert!(new_seq.contains(['C', 'G']));
@@ -230,7 +290,8 @@ mod test {
         let reference = "GTACCTAAAAAATCCCAAACATATAACTGAACTCCTCACACCCAATTGGACGGGGGGGGC";
         let seq       = "GTACCTAAAAAATCCCAAACATATAACTGAACTCCTCACACCCAATTGGACCAATCTATC";
         let quals     = "AAAAAEEEEEEEEEEEEEEEEEEEJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ";
-        match mask_and_validate(seq.len(), reference, seq, quals) {
+        let cigar     = vec![Cigar::Match(seq.len())];
+        match mask_and_validate(seq.len(), reference, seq, quals, &cigar) {
             Err(e) => panic!("{e}"),
             Ok((new_seq, new_quals)) => {
                 // Threshold is exatly at the sequence length.
@@ -252,8 +313,9 @@ mod test {
         let reference = "GTACCTAAAAAATCCCAAACATATAACTGAACTCCTCACACCCAATTGGACGGGGGGGGG";
         let seq       = "GTACCTAAAAAATCCCAAACATATAACTGAACTCCTCACACCCAATTGGACCAATCTATC";
         let quals     = "AAAAAEEEEEEEEEEEEEEEEEEEJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ";
+        let cigar     = vec![Cigar::Match(seq.len())];
         for i in reference.len()+1..reference.len()*2 {
-            match mask_and_validate(i, reference, seq, quals) {
+            match mask_and_validate(i, reference, seq, quals, &cigar) {
                 Err(e) => panic!("{e}"),
                 Ok((sequence, _))  => {
                     assert!(!sequence.contains(['C', 'G'])) // Since our threshold goes beyond the length, everything should be masked.
@@ -268,7 +330,8 @@ mod test {
         let reference = "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG";
         let seq       = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
         let quals     = "JJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ";
-        match mask_and_validate(1, reference, seq, quals) {
+        let cigar     = vec![Cigar::Match(seq.len())];
+        match mask_and_validate(1, reference, seq, quals, &cigar) {
             Err(e) => panic!("{e}"),
             Ok((seq, quals)) => {
                 assert!(!seq.contains('N'));
@@ -276,7 +339,7 @@ mod test {
             }
         }
 
-        match mask_and_validate(seq.len()+1, reference, seq, quals) {
+        match mask_and_validate(seq.len()+1, reference, seq, quals, &cigar) {
             Err(e) => panic!("{e}"),
             Ok((seq, quals)) => {
                 assert!(seq.chars().all(|c| c == 'N'));
@@ -290,7 +353,8 @@ mod test {
         let reference = "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC";
         let seq       = "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT";
         let quals     = "JJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ";
-        match mask_and_validate(1, reference, seq, quals) {
+        let cigar     = vec![Cigar::Match(seq.len())]; 
+        match mask_and_validate(1, reference, seq, quals, &cigar) {
             Err(e) => panic!("{e}"),
             Ok((seq, quals)) => {
                 assert!(!seq.contains('N'));
@@ -298,7 +362,7 @@ mod test {
             }
         }
 
-        match mask_and_validate(seq.len()+1, reference, seq, quals) {
+        match mask_and_validate(seq.len()+1, reference, seq, quals, &cigar) {
             Err(e) => panic!("{e}"),
             Ok((seq, quals)) => {
                 assert!(seq.chars().all(|c| c == 'N'));

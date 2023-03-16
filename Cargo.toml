@@ -5,6 +5,11 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[profile.release]
+  lto             = true     # Enable link-time optimization
+  codegen-units   = 1        # Don't split compilation across multiple units.
+  panic           = "abort"  # Suppress stack unwinding behavior, and let the OS deal with errors.
+
 [profile.dev.package."*"]
   opt-level = 3
 

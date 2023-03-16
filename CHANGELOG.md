@@ -1,6 +1,17 @@
+# version 0.2.0 (2023-03-16)
+## Features: 
+- **Indels are now taken into account**. 
+  - Current implementation is a bit hacky, and could use a ***lot*** of optimization (~25% runtime increase has been noticed when applying the software on a single thread. This slowdown has been *partially* mitigated through link-time optimisation, through ~12%)
+  - Looks like it works, but still need to implement specific unit tests for indel cases.
+
+
+## Development
+- A Small benchmark of `apply_pmd_masking()` has been implemented through criterion (See [README](README.md))
+
+
 # version 0.1.3 (2023-03-14)
 ## Features
-**A More trustworthy codebase :** ~91.86% line coverage at this point.
+- **A More trustworthy codebase :** ~91.86% line coverage at this point.
 - Basic suite of Unit tests (PRs #4 #6 #9)
 - Basic suite of integration tests (PRs #6 and #9)
 - Basic Continuous Integration workflow for Ubuntu and MacOS (PRs #5 #7)
