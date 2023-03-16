@@ -8,7 +8,7 @@ pub mod error;
 
 use error::RuntimeError;
 use genome::Orientation;
-use mask::{Masks, MaskEntry, MaskThreshold};
+pub use mask::{Masks, MaskEntry, MaskThreshold};
 
 use anyhow::Result;
 use rust_htslib::{faidx, bam};
