@@ -6,7 +6,7 @@ mod error;
 pub use error::MaskThresholdError;
 
 // Default orientations which MUST be contained within a MaskThreshold.
-static ORIENTATIONS: [Orientation; 2] = [Orientation::FivePrime, Orientation::ThreePrime];
+pub(crate) static ORIENTATIONS: [Orientation; 2] = [Orientation::FivePrime, Orientation::ThreePrime];
 
 #[derive(Debug, PartialEq)]
 pub struct MaskThreshold { pub(crate) inner: HashMap<Orientation, Position> }

@@ -1,3 +1,13 @@
+# version 0.3.0 (2023-03-19à
+## Features: 
+Additional `-M`|`--metrics-file` argument allows to optionally specify an output summary file, where the software will keep a record of which positions were selected as masking thresholds. This file is headed, tab-separated, lexicographically ordered and structured according to four fields: 
+- `Chr`: Chromosome name (string)
+- `Std`: Strand orientation (`+`|`-`)
+- `5p` : Position in base pair where `C>T` masking stops applying, starting from the `5p` end.
+- `3p` : Position in base pair where `G>A` masking stops applying, starting from the `3p` end.
+
+Note that `5p` and `3p` positions where the masking threshold was never met are denoted as `NA`.
+
 # version 0.2.0 (2023-03-16)
 ## Features: 
 - **Indels are now taken into account**. 

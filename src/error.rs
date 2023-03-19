@@ -13,7 +13,13 @@ pub enum RuntimeError {
     
 
     #[error("Both the output and input alignment files appears to be the same file! Exiting.")]
-    InputIsOutput
+    InputIsOutput,
+
+    #[error("Failed to open the requested threshold metrics file. [{0}]")]
+    OpenMetrics(#[source] std::io::Error),
+    
+    #[error("Failed to write masking thresholds within the provided metrics file path. [{0}]")]
+    WriteMasksMetrics(#[source] std::io::Error),
 
 }
 

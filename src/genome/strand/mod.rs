@@ -7,7 +7,7 @@ mod error;
 pub use error::StrandError;
 
 /// Strand orientation representation for paired-end sequencing reads.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, Hash)] 
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)] 
 pub enum Strand {
     #[serde(rename = "+")] Forward,
     #[serde(rename = "-")] Reverse
