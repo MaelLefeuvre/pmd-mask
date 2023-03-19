@@ -15,7 +15,7 @@ pub use error::ChrNameError;
 /// let chr = ChrName::new("chrMT");
 /// assert_eq!(chr.inner(), "chrMT");
 /// ```
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ChrName(String);
 
 impl ChrName {

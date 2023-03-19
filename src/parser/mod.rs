@@ -66,6 +66,21 @@ pub struct Cli {
     #[arg(short, long, default_value("0.01"))]
     pub threshold: f32,
 
+    /// Output metrics file.
+    /// 
+    /// Path to an output tab-separated file, summarizing the 3p and 5p position where the masking threshold was met, 
+    /// for each chromosome and strand. Note that the provided positions define the first instance where the misincorporation
+    /// frequency was *lower* than the threshold. i.e. This will correspond to the first position where masking does *not* apply. 
+    /// 
+    /// Entries are lexicographiically sorted according to the name of the chromosome and strand 
+    /// (which may or may not follow the order found within the provided reference file).
+    /// 
+    /// Fields columns are '<Chromosome name> <Strand> <5p-end position> <3p-end position>'.
+    /// 
+    /// "NA" values indicate the threshold was never met for this particular entry thus masking was applied to the whole sequence.
+    #[arg(short='M', long, required(false))]
+    pub metrics_file: Option<PathBuf>,
+
     /// Input alignment file (SAM|BAM|CRAM)
     /// 
     /// Input bam file, on which pmd-masking should be performed. When unspecified, the pmd-mask will look for standard input.

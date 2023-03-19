@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fs::File;
+use std::io::Write;
 use std::path::Path;
 
 use log::{warn, debug, trace};
@@ -17,6 +18,8 @@ mod error;
 pub use error::MasksError;
 
 use crate::misincorporation::Misincorporations;
+use crate::genome::Orientation;
+
 
 /// A Hash collection of Masking thresholds, mapped according to their respective MaskEntries
 /// (i.e. Chromosome name and strand information.)
@@ -86,6 +89,36 @@ impl Masks {
             trace!("Validating {entry} {threshold}");
             threshold.validate().map_err(|e|MasksError::ValidateThresholds(entry.clone(), e))?
         };
+        Ok(())
+    }
+
+    /// Serialize the contents of this struct within a writer.
+    /// Output is headed and Fields are '<Chr> <Std> <5p> <3p>'
+    pub fn write(&self, writer: &mut impl Write) -> std::io::Result<()> {
+        use threshold::ORIENTATIONS;
+
+        // ---- Write header
+        let header = format!("Chr\tStd\t{}\t{}\n", ORIENTATIONS[0], ORIENTATIONS[1]);
+        writer.write_all(header.as_bytes())?;
+
+        // ---- Sort entries according to Entry
+        let mut sorted = self.inner.iter().collect::<Vec<_>>();
+        sorted.sort_by(|a, b| a.0.cmp(b.0));
+
+        // ---- Write entries in order.
+        for (entry, threshold) in sorted.iter() {
+            let mut output_string = format!("{}\t{}", entry.chromosome, entry.strand);
+            for end in [Orientation::FivePrime, Orientation::ThreePrime] {
+                let position = match threshold.get_threshold(&end).expect("Missing threshold").inner() {
+                    usize::MAX => "\tNA".to_string(),
+                    position   => format!("\t{position}"),
+                };
+                output_string.push_str(&position);
+            }
+            output_string.push('\n');
+            writer.write_all(output_string.as_bytes())?;
+        }
+        writer.flush()?;
         Ok(())
     }
 }

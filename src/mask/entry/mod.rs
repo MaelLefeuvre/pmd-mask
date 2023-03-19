@@ -9,7 +9,7 @@ use rust_htslib::bam::{HeaderView, Record};
 mod error;
 pub use error::MaskEntryError;
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MaskEntry {
     pub chromosome: ChrName,
     pub strand    : Strand
@@ -21,6 +21,8 @@ impl Display for MaskEntry {
         out.fmt(f)
     }
 }
+
+
 
 impl MaskEntry {
     pub fn from_htslib_record(header_view: &HeaderView, record: &mut Record) -> Result<Self, MaskEntryError> {

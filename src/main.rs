@@ -24,6 +24,8 @@
 //! 4. Stream the masked sequences to either an output file, or the standard output. The output format and compression level 
 //!    can be specified by the used. 
 
+use std::fs::File;
+use std::io::BufWriter;
 use std::path::Path;
 
 use pmd_mask::apply_pmd_mask;
@@ -89,6 +91,12 @@ fn run(args: &Cli) -> Result<(), RuntimeError> {
     //      for each chromosome, strand, and orientation.
     info!("Computing masking positions from {}, using {} as threshold", &args.misincorporation.display(), args.threshold);
     let thresholds = Masks::from_path(&args.misincorporation, args.threshold)?;
+
+    if let Some(ref file) = args.metrics_file {
+        info!("Writing masking thresholds to {}", file.display());
+        let mut metrics_writer = BufWriter::new(File::create(file).map_err(RuntimeError::OpenMetrics)?);
+        thresholds.write(&mut metrics_writer).map_err(RuntimeError::WriteMasksMetrics)?;
+    }
 
     // ---- Open Reference File
     info!("Opening reference file {}", &args.reference.display());
