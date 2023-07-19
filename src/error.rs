@@ -21,5 +21,7 @@ pub enum RuntimeError {
     #[error("Failed to write masking thresholds within the provided metrics file path. [{0}]")]
     WriteMasksMetrics(#[source] std::io::Error),
 
+    #[error("Length of the retrieved reference sequence does not match the length of the read")]
+    ReferenceOutOfIndexError,
 }
 

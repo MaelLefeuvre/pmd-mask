@@ -1,4 +1,8 @@
-# version 0.3.0 (2023-03-19à
+# version 0.3.1  (2023-07-19)
+## Bugfixes 
+
+- Fixes (#13) `mask_sequence()` function now correctly handles out of index errors when attempting to retrieve positions that lie beyond the chromosome's length. A  `ReferenceOutOfIndexError` is now raised to the `mask_5p()` and `mask_3p()` functions, while `apply_pmd_mask()` now recover from such an error if and only if the read happens to be labeled as 'segment unmapped' (`0x4`). 
+# version 0.3.0 (2023-03-19)
 ## Features: 
 Additional `-M`|`--metrics-file` argument allows to optionally specify an output summary file, where the software will keep a record of which positions were selected as masking thresholds. This file is headed, tab-separated, lexicographically ordered and structured according to four fields: 
 - `Chr`: Chromosome name (string)
