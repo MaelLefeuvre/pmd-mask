@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
+
 use log::{warn, debug, trace};
 
 pub mod entry;
@@ -50,14 +51,14 @@ impl TryFrom<&Misincorporations> for Masks {
 impl Masks {
 
     pub fn from_path(misincorporations: impl AsRef<Path>, threshold: f32) -> Result<Self, MasksError> {
-        let file = File::open(&misincorporations).unwrap();
-            //.map_err(|e| MisincorporationsError::OpenFile(path.as_ref().display().to_string(), e))?;
+        let file = File::open(&misincorporations)
+            .map_err(|e| MasksError::OpenFile{source: e})?;
         Self::from_reader(file, threshold)
     }
 
     pub fn from_reader<R: std::io::Read>(misincorporations: R, threshold: f32) -> Result<Self, MasksError> {
 
-        let mut threshold_positions = Misincorporations::from_reader(misincorporations, threshold).unwrap();
+        let mut threshold_positions = Misincorporations::from_reader(misincorporations, threshold)?;
 
         // ---- Validate misincorporation and issue warnings for any 'abnormal' frequency found.
         let mut abnormal_frequencies = threshold_positions
@@ -76,7 +77,7 @@ impl Masks {
             })
         );
 
-        Ok(Masks::try_from(&threshold_positions).unwrap())
+        Masks::try_from(&threshold_positions)
     }
 
     pub fn get(&self, entry: &MaskEntry) -> Option<&MaskThreshold> {
@@ -173,13 +174,25 @@ mod test {
     #[test]
     fn validate() {
         let mut masks = Masks::try_from(&dummy_misincorporations()).expect("Invalid Misincorporations");
-        assert_eq!(masks.validate(), Ok(()));
+        match masks.validate() {
+            Ok(()) => {},
+            _ => panic!("Invalid mask")
+        };
 
         let bad_entry       = MaskEntry{chromosome: ChrName::new("chr1"), strand: Reverse};
         let funky_threshold = masks.inner.get_mut(&bad_entry).expect("Entry not found");
         *funky_threshold    = MaskThreshold{inner: HashMap::new()};
         
-        assert_eq!(masks.validate(), Err(MasksError::ValidateThresholds(bad_entry, MaskThresholdError::ValidateThresh{got:0, want:2})))
+        match masks.validate() {
+            Ok(()) => panic!("Masks should be invalid at this point."),
+            Err(e) => match e {
+                MasksError::ValidateThresholds(entry, treshold_err) => {
+                    assert_eq!(bad_entry, entry);
+                    assert_eq!(treshold_err, MaskThresholdError::ValidateThresh { got: 0, want: 2 })
+                },
+                _ => panic!("Invalid error type.")
+            }
+        }
     }
 
 }

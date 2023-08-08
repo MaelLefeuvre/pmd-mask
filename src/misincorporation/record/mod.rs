@@ -1,4 +1,4 @@
-use std::{fmt::{self, Display, Formatter}};
+use std::fmt::{self, Display, Formatter};
 use crate::genome::{ChrName, Orientation, Strand, Position};
 
 use serde::Deserialize;

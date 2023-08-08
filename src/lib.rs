@@ -10,7 +10,7 @@ use error::RuntimeError;
 use genome::Orientation;
 pub use mask::{Masks, MaskEntry, MaskThreshold};
 
-use anyhow::Result;
+use anyhow::{Result, Context};
 use rust_htslib::{faidx, bam};
 use log::{debug, trace, warn};
 
@@ -48,8 +48,8 @@ fn mask_3p(thresholds: &MaskThreshold, reference: &[u8], seq: &mut [u8], quals: 
 }
 
 
-#[inline]
-pub fn apply_pmd_mask<B>(bam: &mut B, reference: &faidx::Reader, masks: &Masks, writer: &mut bam::Writer) -> Result<(), RuntimeError>
+#[inline(never)]
+pub fn apply_pmd_mask<B>(bam: &mut B, reference: &faidx::Reader, masks: &Masks, writer: &mut bam::Writer) -> Result<()>
 where   B: bam::Read,
 {
     // ---- Get header template
@@ -79,9 +79,10 @@ where   B: bam::Read,
         };
 
 
-        // ---- Get the reference's position         
-        let reference = reference.fetch_seq(current_record.chromosome.inner(), bam_record.reference_start() as usize, bam_record.reference_end() as usize -1 ) ?;
-
+        // ---- Get the reference's position 
+        // Memory leak here...
+        let refseq = reference.fetch_seq(current_record.chromosome.inner(), bam_record.reference_start() as usize, bam_record.reference_end() as usize -1 ) ?;
+        
         let aligned_pos = bam_record.aligned_pairs().map(|[readpos, refpos]| [readpos as usize, (refpos - bam_record.pos()) as usize]).collect::<Vec<[usize; 2]>>();
     
         trace!("-----------------------");
@@ -96,20 +97,30 @@ where   B: bam::Read,
         // @ TODO: use this?: static DECODE_BASE: &[u8] = b"=ACMGRSVTWYHKDBN";
         let sequence = bam_record.seq().as_bytes();
         // @ SAFETY: Sequence is only parsed for TRACE logging, displaying potentially invalid UTF8-character is the whole point..
-        trace!("Reference: {}", unsafe { str::from_utf8_unchecked(reference) });
+        trace!("Reference: {}", unsafe { str::from_utf8_unchecked(refseq) });
         trace!("Sequence : {}", unsafe { str::from_utf8_unchecked(&sequence) });
 
+        const UNMAPPED_CONTEXT: &str = "(This is merely a warning because this record was already set as UnMapped (0x4)";
+        let err_msg = |e: &RuntimeError , end: Orientation | {
+            let position = bam_record.pos();
+            format!("While attempting to mask the {end} end of record [{current_record} {position}]: {e}")
+        };
         // ---- Mask 5p' positions
-        if let Err(e) = mask_5p(relevant_thresholds, reference, &mut new_seq, &mut new_quals, &aligned_pos) {
+        if let Err(e) = mask_5p(relevant_thresholds, refseq, &mut new_seq, &mut new_quals, &aligned_pos) {
+            let context = err_msg(&e, Orientation::FivePrime); 
             match bam_record.is_unmapped() {
-                true => warn!("{e}"),
-                false => return Err(e)
+                true => warn!("@ {context} {UNMAPPED_CONTEXT}"),
+                false => return Err(e).with_context(|| format!("{current_record}"))
             }
         };
 
         // ---- Mask 3p' positions
-        if let Err(e) = mask_3p(relevant_thresholds, reference, &mut new_seq, &mut new_quals, &aligned_pos) {
-            if ! bam_record.is_unmapped() { return Err(e) } else { warn!("{e}")}
+        if let Err(e) = mask_3p(relevant_thresholds, refseq, &mut new_seq, &mut new_quals, &aligned_pos) {
+            let context = err_msg(&e, Orientation::ThreePrime);
+            match bam_record.is_unmapped() { 
+                true  => warn!("{context} {UNMAPPED_CONTEXT}"), 
+                false => return Err(e).context(context)
+            }
         };
 
         // SAFETY: samtools performs UTF8 sanity checks on the raw sequence. So we're ok.
@@ -119,6 +130,9 @@ where   B: bam::Read,
         bam_record.clone_into(&mut out_record);
         out_record.set(bam_record.qname(), Some(&bam_record.cigar().take()), &new_seq, &new_quals);
         writer.write(&out_record)?;
+
+        // Manually remove rust-htslib fetch_seq leak.
+        unsafe {libc::free(refseq.as_ptr() as *mut std::ffi::c_void)}
     }
     Ok(())
 }
