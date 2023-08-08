@@ -50,7 +50,7 @@ impl Misincorporations {
         let mut threshold_positions = Vec::with_capacity(32 * 2 * 2);
 
         'nextline: for (line, result) in reader.deserialize::<MisincorporationRecord>().enumerate() {
-            let record = result.map_err(|e|DeserializeRecord(line, e.into()))?;
+            let record = result.map_err(|e|DeserializeRecord(line, e.to_string()))?;
             // Once we've found a position at which the threshold is met, we 
             // don't need to parse entries which belong from the same chromosome.
             if let Some(chromosome_to_skip) = skip_chromosome {

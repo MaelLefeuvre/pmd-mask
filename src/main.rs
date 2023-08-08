@@ -68,15 +68,20 @@ where   F: AsRef<Path>
 }
 
 
-fn run(args: &Cli) -> Result<(), RuntimeError> {
+fn run(args: &Cli) -> Result<()> {
 
     // ---- Ensure Input bam and output bam are not the same.
     if let Some(ref input_file) = args.bam{
         if let Some(ref output_file) = args.output {
             if *input_file == *output_file {
-                return Err(RuntimeError::InputIsOutput)
+                anyhow::bail!(RuntimeError::InputIsOutput)
             }
         }
+    }
+
+    // ---- Ensure the stdin is being sollicited if there are no specified input bams.
+    if atty::is(atty::Stream::Stdin) && args.bam.is_none() {
+            anyhow::bail!(RuntimeError::NoStdin)
     }
 
 

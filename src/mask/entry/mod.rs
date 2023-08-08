@@ -44,7 +44,7 @@ pub mod dummy {
         let mut header = Header::new();
         let mut chr_record = HeaderRecord::new("SQ".as_bytes());
         chr_record.push_tag("SN".as_bytes(), &"chr1".to_string());
-        chr_record.push_tag("LN".as_bytes(), &249250621);
+        chr_record.push_tag("LN".as_bytes(), 249250621);
         header.push_record(&chr_record);
 
         let mut record = Record::new();

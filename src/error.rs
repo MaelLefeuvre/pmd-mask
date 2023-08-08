@@ -10,7 +10,6 @@ pub enum RuntimeError {
 
     #[error(transparent)]
     ParseMisincorporation(#[from] crate::mask::MasksError),
-    
 
     #[error("Both the output and input alignment files appears to be the same file! Exiting.")]
     InputIsOutput,
@@ -21,5 +20,14 @@ pub enum RuntimeError {
     #[error("Failed to write masking thresholds within the provided metrics file path. [{0}]")]
     WriteMasksMetrics(#[source] std::io::Error),
 
+    #[error("Length of the retrieved reference sequence does not match the length of the read")]
+    ReferenceOutOfIndexError,
+
+    #[error(
+    "Neither '--bam', nor the standard input is being sollicited at this point. \
+    Please provide pmd-mask with an input to work from, either through piping, or with the --bam argument"
+    )]
+//    #[error("Error")]
+    NoStdin,
 }
 

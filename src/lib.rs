@@ -10,44 +10,46 @@ use error::RuntimeError;
 use genome::Orientation;
 pub use mask::{Masks, MaskEntry, MaskThreshold};
 
-use anyhow::Result;
+use anyhow::{Result, Context};
 use rust_htslib::{faidx, bam};
-use log::{debug, trace};
+use log::{debug, trace, warn};
 
 
 use rust_htslib::bam::ext::BamRecordExtensions;
 
 
 #[inline]
-fn mask_sequence(range: Range<usize>, reference: &[u8], seq: &mut [u8], quals: &mut [u8], target_nucleotide: u8, positions: &[[usize; 2]]) {
+fn mask_sequence(range: Range<usize>, reference: &[u8], seq: &mut [u8], quals: &mut [u8], target_nucleotide: u8, positions: &[[usize; 2]]) -> Result<(), RuntimeError> {
     'mask: for [readpos, refpos] in positions.iter().copied().skip(range.start).take_while(|[readpos, _]| *readpos < range.end ) {
-        if readpos >= seq.len() { break 'mask}
-        if reference[refpos] == target_nucleotide {
+        if readpos >= seq.len() { break 'mask }
+        let reference_nucleotide = reference.get(refpos).ok_or_else(|| RuntimeError::ReferenceOutOfIndexError)?;
+        if *reference_nucleotide == target_nucleotide {
             seq[readpos] = b'N';
             quals[readpos] = 0;
         }
     }
+    Ok(())
 }
 
 #[inline]
-fn mask_5p(thresholds: &MaskThreshold, reference: &[u8], seq: &mut [u8], quals: &mut [u8], positions: &[[usize; 2]]) {
+fn mask_5p(thresholds: &MaskThreshold, reference: &[u8], seq: &mut [u8], quals: &mut [u8], positions: &[[usize; 2]]) -> Result<(), RuntimeError> {
     // Unwrap cause we have previously validated the struct. [Code smell]
     let mask_5p_threshold = thresholds.get_threshold(&Orientation::FivePrime).unwrap().inner();
     let mask_5p_range     = 0..mask_5p_threshold -1;
-    mask_sequence(mask_5p_range, reference, seq, quals, b'C', positions);
+    mask_sequence(mask_5p_range, reference, seq, quals, b'C', positions)
 }
 
 #[inline]
-fn mask_3p(thresholds: &MaskThreshold, reference: &[u8], seq: &mut [u8], quals: &mut [u8], positions: &[[usize; 2]]) {
+fn mask_3p(thresholds: &MaskThreshold, reference: &[u8], seq: &mut [u8], quals: &mut [u8], positions: &[[usize; 2]]) -> Result<(), RuntimeError> {
     // Unwrap cause we have previously validated the struct. [Code smell]
     let mask_3p_threshold = thresholds.get_threshold(&Orientation::ThreePrime).unwrap().inner();
     let mask_3p_range     = seq.len().saturating_sub(mask_3p_threshold-1)..seq.len();
-    mask_sequence(mask_3p_range, reference, seq, quals, b'G', positions);
+    mask_sequence(mask_3p_range, reference, seq, quals, b'G', positions)
 }
 
 
-#[inline]
-pub fn apply_pmd_mask<B>(bam: &mut B, reference: &faidx::Reader, masks: &Masks, writer: &mut bam::Writer) -> Result<(), RuntimeError>
+#[inline(never)]
+pub fn apply_pmd_mask<B>(bam: &mut B, reference: &faidx::Reader, masks: &Masks, writer: &mut bam::Writer) -> Result<()>
 where   B: bam::Read,
 {
     // ---- Get header template
@@ -77,9 +79,10 @@ where   B: bam::Read,
         };
 
 
-        // ---- Get the reference's position         
-        let reference = reference.fetch_seq(current_record.chromosome.inner(), bam_record.reference_start() as usize, bam_record.reference_end() as usize -1 ) ?;
-
+        // ---- Get the reference's position 
+        // Memory leak here...
+        let refseq = reference.fetch_seq(current_record.chromosome.inner(), bam_record.reference_start() as usize, bam_record.reference_end() as usize -1 ) ?;
+        
         let aligned_pos = bam_record.aligned_pairs().map(|[readpos, refpos]| [readpos as usize, (refpos - bam_record.pos()) as usize]).collect::<Vec<[usize; 2]>>();
     
         trace!("-----------------------");
@@ -94,14 +97,31 @@ where   B: bam::Read,
         // @ TODO: use this?: static DECODE_BASE: &[u8] = b"=ACMGRSVTWYHKDBN";
         let sequence = bam_record.seq().as_bytes();
         // @ SAFETY: Sequence is only parsed for TRACE logging, displaying potentially invalid UTF8-character is the whole point..
-        trace!("Reference: {}", unsafe { str::from_utf8_unchecked(reference) });
+        trace!("Reference: {}", unsafe { str::from_utf8_unchecked(refseq) });
         trace!("Sequence : {}", unsafe { str::from_utf8_unchecked(&sequence) });
 
+        const UNMAPPED_CONTEXT: &str = "(This is merely a warning because this record was already set as UnMapped (0x4)";
+        let err_msg = |e: &RuntimeError , end: Orientation | {
+            let position = bam_record.pos();
+            format!("While attempting to mask the {end} end of record [{current_record} {position}]: {e}")
+        };
         // ---- Mask 5p' positions
-        mask_5p(relevant_thresholds, reference, &mut new_seq, &mut new_quals, &aligned_pos);
+        if let Err(e) = mask_5p(relevant_thresholds, refseq, &mut new_seq, &mut new_quals, &aligned_pos) {
+            let context = err_msg(&e, Orientation::FivePrime); 
+            match bam_record.is_unmapped() {
+                true => warn!("@ {context} {UNMAPPED_CONTEXT}"),
+                false => return Err(e).with_context(|| format!("{current_record}"))
+            }
+        };
 
         // ---- Mask 3p' positions
-        mask_3p(relevant_thresholds, reference, &mut new_seq, &mut new_quals, &aligned_pos);
+        if let Err(e) = mask_3p(relevant_thresholds, refseq, &mut new_seq, &mut new_quals, &aligned_pos) {
+            let context = err_msg(&e, Orientation::ThreePrime);
+            match bam_record.is_unmapped() { 
+                true  => warn!("{context} {UNMAPPED_CONTEXT}"), 
+                false => return Err(e).context(context)
+            }
+        };
 
         // SAFETY: samtools performs UTF8 sanity checks on the raw sequence. So we're ok.
         trace!("Masked   : {}", unsafe{ std::str::from_utf8_unchecked(&new_seq) });
@@ -110,6 +130,9 @@ where   B: bam::Read,
         bam_record.clone_into(&mut out_record);
         out_record.set(bam_record.qname(), Some(&bam_record.cigar().take()), &new_seq, &new_quals);
         writer.write(&out_record)?;
+
+        // Manually remove rust-htslib fetch_seq leak.
+        unsafe {libc::free(refseq.as_ptr() as *mut std::ffi::c_void)}
     }
     Ok(())
 }
@@ -212,7 +235,7 @@ mod test {
         // Mask 5p
         let pair_indices = cigar2paired_indices(cigar);
         println!("---- 5p masking with threshold set at {threshold_len}");
-        mask_5p(&threshold, reference, &mut seq, &mut quals, &pair_indices);
+        mask_5p(&threshold, reference, &mut seq, &mut quals, &pair_indices)?;
         print_align!(reference, seq, quals);
 
         // ---- Validate 5p masking.
@@ -236,7 +259,7 @@ mod test {
 
         // Mask 3p
         println!("---- 3p masking with threshold set at {threshold_len}");
-        mask_3p(&threshold, reference, &mut seq, &mut quals, &pair_indices);
+        mask_3p(&threshold, reference, &mut seq, &mut quals, &pair_indices)?;
         print_align!(reference, seq, quals);
 
         // ---- Validate 3p masking
@@ -369,6 +392,15 @@ mod test {
                 assert!(quals.chars().all(|c| c == '!'));
             }
         }
+    }
+
+    #[test]
+    fn mask_spurious_unmapped_sequence() {
+        let reference = "N";
+        let seq       = "GGATCACAGGTCTATCACCCTATTAACCACTCACGG";
+        let quals     = "AAFFFJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ";
+        let cigar     = vec![Cigar::Match(seq.len())];
+        println!("{:?}", mask_and_validate(10, reference, seq, quals, &cigar));
     }
 }
 
