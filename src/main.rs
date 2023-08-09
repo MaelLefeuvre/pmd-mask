@@ -107,6 +107,13 @@ fn run(args: &Cli) -> Result<()> {
     info!("Opening reference file {}", &args.reference.display());
     let reference = faidx::Reader::from_path(&args.reference)?;
 
+    // ---- Absolutely *horrendous* workaround to issue #8 :
+    // Scan through the Debug repr of reference and check if any private field
+    // contains the value 0x0 (i.e.: NULL pointer).
+    if format!("{reference:?}").contains("0x0") {
+        anyhow::bail!(RuntimeError::LoadFaidx)
+    }
+
     // ---- Open bam file
     let mut bam = open_bam_reader(&args.bam)?;
     

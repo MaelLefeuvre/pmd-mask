@@ -1,3 +1,7 @@
+# version 0.3.2 (2023-08-09)
+## Bugfixes
+- ***Temporary*** workaround to issue #8 : Providing `pmd-mask` with an invalid or corrupted fasta index now leads to an uncoverable error. This workaround.
+
 # version 0.3.1  (2023-07-19)
 ## Bugfixes 
 - Fixes issue #13 : `mask_sequence()` function now correctly handles out of index errors when attempting to retrieve positions that lie beyond the chromosome's length. A  `ReferenceOutOfIndexError` is now raised to the `mask_5p()` and `mask_3p()` functions, while `apply_pmd_mask()` now recover from such an error if and only if the read happens to be labeled as 'segment unmapped' (`0x4`).

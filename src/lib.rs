@@ -81,7 +81,7 @@ where   B: bam::Read,
 
         // ---- Get the reference's position 
         // Memory leak here...
-        let refseq = reference.fetch_seq(current_record.chromosome.inner(), bam_record.reference_start() as usize, bam_record.reference_end() as usize -1 ) ?;
+        let refseq = reference.fetch_seq(current_record.chromosome.inner(), bam_record.reference_start() as usize, bam_record.reference_end() as usize -1 )?;
         
         let aligned_pos = bam_record.aligned_pairs().map(|[readpos, refpos]| [readpos as usize, (refpos - bam_record.pos()) as usize]).collect::<Vec<[usize; 2]>>();
     

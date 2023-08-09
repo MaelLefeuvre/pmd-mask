@@ -27,7 +27,13 @@ pub enum RuntimeError {
     "Neither '--bam', nor the standard input is being sollicited at this point. \
     Please provide pmd-mask with an input to work from, either through piping, or with the --bam argument"
     )]
-//    #[error("Error")]
     NoStdin,
+
+    #[error(
+    "Failed to load fasta index into memory. \
+    Ensure the provided fasta isn't corrupted, and is properly indexed with a companion '.fai' \
+    file within the same directory."
+    )]
+    LoadFaidx,
 }
 
