@@ -5,6 +5,7 @@
 ## Documentation
 - Complete [genome::Strand](src/genome/strand/mod.rs) documentation + doctests.
 - Complete [genome::Orientation](src/genome/orientation/mod.rs) documentation + doctests.
+- Complete [genome::coordinate::Position](src/genome/coordinate/position.rs) and [genome::coordinate::ChrName](src/genome/coordinate/chr_name/mod.rs) documentation + doctests.
 
 # version 0.3.1  (2023-07-19)
 ## Bugfixes 
