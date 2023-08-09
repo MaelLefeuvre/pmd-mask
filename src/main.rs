@@ -46,9 +46,11 @@ use rust_htslib::errors::Error as HtslibError;
 use log::{error, info, debug};
 
 
-
-
-/// Open a bam, from either a file, or from standard input.
+/// Open a bam, from either a file, or from standard input and return a [`rust_htslib::bam::Reader`]
+/// 
+/// # Behavior
+/// - Calls [bam::Reader::from_stdin()](rust_htslib::bam::Reader) if `maybe_file` is [`None`].
+/// - Calls [bam::Reader::from_path()](rust_htslib::bam::Reader) if `maybe_file` is [`Some(path)`](`Some`).
 fn open_bam_reader(maybe_file: &Option<impl AsRef<Path>>) -> Result<bam::Reader, HtslibError> {
     match maybe_file {
         Some(ref path) => { info!("Opening {}", &path.as_ref().display()); bam::Reader::from_path(path) },
@@ -57,7 +59,11 @@ fn open_bam_reader(maybe_file: &Option<impl AsRef<Path>>) -> Result<bam::Reader,
 }
 
 
-/// Open a bam writer, either to a file, or to standard output.
+/// Open a bam, writer, using  either a file, or standard output and return a [`rust_htslib::bam::Reader`]
+/// 
+/// # Behavior
+/// - Calls [bam::Writer::from_stdin()](rust_htslib::bam::Writer) if `maybe_file` is [`None`].
+/// - Calls [bam::Writer::from_path()](rust_htslib::bam::Writer) if `maybe_file` is [`Some(path)`](`Some`).
 fn open_bam_writer<F>(maybe_file: &Option<F>, header: &bam::Header, output_fmt: bam::Format) -> Result<bam::Writer, HtslibError>
 where   F: AsRef<Path> 
 {
@@ -68,6 +74,7 @@ where   F: AsRef<Path>
 }
 
 
+/// Main logic for command line `pmd-mask` binary
 fn run(args: &Cli) -> Result<()> {
 
     // ---- Ensure Input bam and output bam are not the same.

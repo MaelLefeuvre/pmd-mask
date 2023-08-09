@@ -1,6 +1,7 @@
 
 use thiserror::Error;
 
+/// Error type enum for [`crate::parser::Cli`] command line argument parser.
 #[derive(Debug, Error)]
 pub enum CliError {
     #[error("Accepted values: 'Sam|Bam|Cram'")]

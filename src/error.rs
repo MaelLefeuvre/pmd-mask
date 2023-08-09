@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+/// Main runtime error type enum for [`pmd-mask`](`crate`)
 #[derive(Debug, Error)]
 pub enum RuntimeError {
     #[error(transparent)]

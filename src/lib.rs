@@ -18,6 +18,20 @@ use log::{debug, trace, warn};
 use rust_htslib::bam::ext::BamRecordExtensions;
 
 
+/// Generic internal function intended to apply selective masking on either end of a raw `&mut [u8]` read.
+/// Mainly used within [`mask_5p`] and [`mask_3p`].
+/// 
+/// # Parameters
+/// - `range`: half-bounded [`Range`] of indices where masking should be applied within `seq`.
+/// - `reference`: raw byte representation of reference sequence corresponding to the sequence to mask. 
+///    Note that this sequence must contain and take into account any indel found within `seq`
+/// - `seq`: raw byte representation of the sequence to mask. Note that this sequence must preserve any indel found within it.
+/// - `quals`: raw byte representation of the phred-scores of `seq`.
+/// - `positions`: matching positions found between `seq` and `ref`. These can be retrieved using 
+///    [`rust_htslib::bam::Reader::aligned_pairs()`](`rust_htslib::bam::Reader`)
+
+/// # Errors
+/// - May emit a [`RuntimeError::ReferenceOutOfIndexError`] if the function ever fails to retrieve a reference nucleotide.
 #[inline]
 fn mask_sequence(range: Range<usize>, reference: &[u8], seq: &mut [u8], quals: &mut [u8], target_nucleotide: u8, positions: &[[usize; 2]]) -> Result<(), RuntimeError> {
     'mask: for [readpos, refpos] in positions.iter().copied().skip(range.start).take_while(|[readpos, _]| *readpos < range.end ) {
@@ -31,6 +45,23 @@ fn mask_sequence(range: Range<usize>, reference: &[u8], seq: &mut [u8], quals: &
     Ok(())
 }
 
+/// Apply selective masking from the [`Orientation::FivePrime`] end of a read.
+/// 
+/// # Parameters:  
+/// - `threshold`: reference to a mask [`MaskThreshold`]. This is where the relative [`Position`](`crate::genome::Position`)
+///   of the [`ThreePrime`](`Orientation::ThreePrime`) end is retrieved.
+/// - `reference`: raw byte representation of reference sequence corresponding to the sequence to mask. 
+///    Note that this sequence must contain and take into account any indel found within `seq`
+/// - `seq`: raw byte representation of the read sequence to mask. Note that this sequence must preserve any indel found within it.
+/// - `quals`: raw byte representation of the phred-scores of `seq`.
+/// - `positions`: matching positions found between `seq` and `ref`. These can be retrieved using 
+///    [`rust_htslib::bam::Reader::aligned_pairs()`](`rust_htslib::bam::Reader`)
+/// 
+/// # Errors: 
+///  - May emit a [`RuntimeError::ReferenceOutOfIndexError`] (see [`mask_sequence`])
+///
+/// # @TODO:
+/// Fix this horrible code stench: [`mask_3p`] and [`mask_5p`] quite identical, and may have to much responsibility
 #[inline]
 fn mask_5p(thresholds: &MaskThreshold, reference: &[u8], seq: &mut [u8], quals: &mut [u8], positions: &[[usize; 2]]) -> Result<(), RuntimeError> {
     // Unwrap cause we have previously validated the struct. [Code smell]
@@ -39,6 +70,23 @@ fn mask_5p(thresholds: &MaskThreshold, reference: &[u8], seq: &mut [u8], quals: 
     mask_sequence(mask_5p_range, reference, seq, quals, b'C', positions)
 }
 
+/// Apply selective masking from the [`Orientation::ThreePrime`] end of a read.
+/// 
+/// # Parameters:  
+/// - `threshold`: reference to a mask [`MaskThreshold`]. This is where the relative [`Position`](`crate::genome::Position`)
+///   of the [`ThreePrime`](`Orientation::ThreePrime`) end is retrieved.
+/// - `reference`: raw byte representation of reference sequence corresponding to the sequence to mask. 
+///    Note that this sequence must contain and take into account any indel found within `seq`
+/// - `seq`: raw byte representation of the read sequence to mask. Note that this sequence must preserve any indel found within it.
+/// - `quals`: raw byte representation of the phred-scores of `seq`.
+/// - `positions`: matching positions found between `seq` and `ref`. These can be retrieved using 
+///    [`rust_htslib::bam::Reader::aligned_pairs()`](`rust_htslib::bam::Reader`)
+/// 
+/// # Errors: 
+///  - May emit a [`RuntimeError::ReferenceOutOfIndexError`] (see [`mask_sequence`])
+///
+/// # @TODO:
+/// Fix this horrible code stench: [`mask_3p`] and [`mask_5p`] quite identical, and may have to much responsibility
 #[inline]
 fn mask_3p(thresholds: &MaskThreshold, reference: &[u8], seq: &mut [u8], quals: &mut [u8], positions: &[[usize; 2]]) -> Result<(), RuntimeError> {
     // Unwrap cause we have previously validated the struct. [Code smell]
@@ -48,7 +96,31 @@ fn mask_3p(thresholds: &MaskThreshold, reference: &[u8], seq: &mut [u8], quals: 
 }
 
 
-#[inline(never)]
+/// Apply selective masking on any struct implementing [`rust_htslib::bam::Read`], using a reference genome and a
+/// structured set of masking thresholds ([`Masks`]). Masked records and then written to the provided `writer`.
+/// # Usage
+/// ```
+/// # use std::error::Error;
+/// use rust_htslib::{bam::{self, Read}, faidx};
+/// use pmd_mask::mask::Masks;
+/// fn main() -> Result<(), Box<dyn Error>> {
+/// 
+///     // ---- Get an input bam, a reference genome, and a misincorpooration file.
+///     let reference  = faidx::Reader::from_path("tests/test-data/reference/hs37d5-MTonly/hs37d5-MTonly.fa.gz")?;
+///     let mut reader = bam::Reader::from_path("tests/test-data/bam/dummy-MTonly/dummy-MTonly-1000.bam")?;
+///     let masks = Masks::from_path("tests/test-data/bam/dummy-MTonly/misincorporation.txt", 0.01)?;
+///
+///     // ----- Prepare an output
+///     let header = bam::Header::from_template(reader.header());
+///     let mut output = bam::Writer::from_stdout(&header, bam::Format::Sam)?;
+/// 
+///     // ---- Apply pmd-mask
+///     pmd_mask::apply_pmd_mask(&mut reader, &reference, &masks, &mut output)?;
+/// 
+///     Ok(())
+/// }
+/// ```
+#[inline]
 pub fn apply_pmd_mask<B>(bam: &mut B, reference: &faidx::Reader, masks: &Masks, writer: &mut bam::Writer) -> Result<()>
 where   B: bam::Read,
 {

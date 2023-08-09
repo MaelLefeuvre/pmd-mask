@@ -47,8 +47,8 @@ impl TryFrom<&Misincorporations> for Masks {
     /// use pmd_mask::mask::Masks;
     /// 
     /// fn main() -> Result<(), Box<dyn std::error::Error>> {
-    ///     let reader = std::fs::File::open("tests/test-data/bam/dummy-MTonly/misincorporation.txt")?;
-    ///     let misincorporations = Misincorporations::from_reader(reader, 0.01)?;
+    ///     let reader = "tests/test-data/bam/dummy-MTonly/misincorporation.txt";
+    ///     let misincorporations = Misincorporations::from_path(reader, 0.01)?;
     ///     let masks = Masks::try_from(&misincorporations)?;
     ///     Ok(())
     /// }
