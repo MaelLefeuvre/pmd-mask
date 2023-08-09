@@ -7,6 +7,8 @@
 - Complete [genome::Orientation](src/genome/orientation/mod.rs) documentation + doctests.
 - Complete [genome::coordinate::Position](src/genome/coordinate/position.rs) and [genome::coordinate::ChrName](src/genome/coordinate/chr_name/mod.rs) documentation + doctests.
 - Improved [logger::Logger](src/logger/mod.rs) documentation
+- Complete documentation and doctests for [genome::mask::MaskEntry](src/genome/mask/entry/mod.rs), [genome::mask::MaskThreshold](src/genome/mask/threshold/mod.rs) and  [genome::mask::Masks](src/mask/mod.rs).
+
 # version 0.3.1  (2023-07-19)
 ## Bugfixes 
 - Fixes issue #13 : `mask_sequence()` function now correctly handles out of index errors when attempting to retrieve positions that lie beyond the chromosome's length. A  `ReferenceOutOfIndexError` is now raised to the `mask_5p()` and `mask_3p()` functions, while `apply_pmd_mask()` now recover from such an error if and only if the read happens to be labeled as 'segment unmapped' (`0x4`).

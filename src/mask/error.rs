@@ -4,6 +4,7 @@ use crate::misincorporation::MisincorporationsError;
 
 use super::{entry::MaskEntry, threshold::MaskThresholdError};
 
+/// Error type enum for [`crate::mask::Masks`]
 #[derive(Debug, Error)]
 pub enum MasksError {
     #[error("Invalid MaskThreshold within MaskEntry {0}. Got {1}")]

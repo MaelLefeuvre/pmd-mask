@@ -9,6 +9,24 @@ use rust_htslib::bam::{HeaderView, Record};
 mod error;
 pub use error::MaskEntryError;
 
+/// Basic Building  block of a [`crate::mask::Masks`] struct. [`MaskEntry`] contains 
+/// the chromosome and strand information of a [mapDamage-v2](https://github.com/ginolhac/mapDamage)'s
+/// [`misincorporation.txt`](https://ginolhac.github.io/mapDamage/#a4) output file record.
+/// 
+/// Chromosome and Strand are internally encoded as [`crate::genome::ChrName`] and [`crate::genome::Strand`], respectively.
+/// 
+/// [`MaskEntry`] are internally used by [`crate::mask::Masks`] structs as keys for a [`HashMap`](`std::collections::HashMap`)
+/// 
+/// # Usage
+/// 
+/// ```
+/// use pmd_mask::{mask::MaskEntry, genome::{ChrName, Strand}};
+/// 
+/// let mask = MaskEntry {
+///     chromosome: ChrName::new("Y"),
+///     strand: Strand::Reverse
+/// };
+/// ```
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MaskEntry {
     pub chromosome: ChrName,
@@ -16,6 +34,14 @@ pub struct MaskEntry {
 }
 
 impl Display for MaskEntry {
+    /// Return a formatted [`String`] representation of a [`MaskEntry`]
+    /// 
+    /// ```
+    /// use pmd_mask::{mask::MaskEntry, genome::{ChrName, Strand}};
+    /// let mask = MaskEntry { chromosome: ChrName::new("Y"), strand: Strand::Forward };
+    /// 
+    /// assert_eq!(format!("{mask:_^9}"), "___Y +___")
+    /// ```
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let out = format!("{} {}", self.chromosome, self.strand);
         out.fmt(f)
@@ -25,6 +51,30 @@ impl Display for MaskEntry {
 
 
 impl MaskEntry {
+    /// Generate a [`MaskEntry`] from a [`rust_htslib::bam::Record`]. 
+    /// This simply extracts and parses the [`ChrName`] and [`Strand`] from the record.
+    /// 
+    /// # Usage
+    /// ```
+    /// use std::error::Error;
+    /// use rust_htslib::bam::{Read, Reader, Record, HeaderView};
+    /// use pmd_mask::mask::MaskEntry; 
+    /// 
+    /// fn main() -> Result<(), Box<dyn Error>> {
+    ///     let mut bam         = Reader::from_path("tests/test-data/bam/dummy-MTonly/dummy-MTonly-1000.bam")?;
+    ///     let mut header_view = bam.header().clone();
+    ///     let mut record      = bam.records().next().unwrap()?;
+    /// 
+    ///     let mask_entry = MaskEntry::from_htslib_record(&mut header_view, &mut record)?;
+    ///     Ok(())
+    /// }
+    /// ``` 
+    ///
+    /// # Errors
+    /// 
+    /// Will return a [`MaskEntryError::ParseFromHtslib`] if either the chromosome or
+    /// strand orientation of the [`Record`] fails to get parsed as [`ChrName`] and [`Strand`].
+    /// 
     pub fn from_htslib_record(header_view: &HeaderView, record: &mut Record) -> Result<Self, MaskEntryError> {
         use MaskEntryError::ParseFromHtslib;
         let chromosome = ChrName::from_htslib_record(header_view, record).map_err(|e| ParseFromHtslib(Box::new(e)))?;
