@@ -1,4 +1,6 @@
 use thiserror::Error;
+
+/// Error type enum for [`crate::misincorporation::Misincorporations`]
 #[derive(Debug, Error)]
 pub enum MisincorporationsError {
     #[error("@line {0}: Failed to deserialize record in misincorporation file. Got {1}")]

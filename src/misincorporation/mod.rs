@@ -9,7 +9,10 @@ mod record;
 pub use record::MisincorporationRecord;
 
 
-
+/// A collection of *partially* deserialized CSV record from a [mapDamage-v2](https://github.com/ginolhac/mapDamage)'s
+/// [`misincorporation.txt`](https://ginolhac.github.io/mapDamage/#a4) output file. 
+/// 
+/// Each row within the `misincorporation.txt` file is encoded as a [`MisincorporationRecord`]
 #[derive(Debug)]
 pub struct Misincorporations{inner: Vec<MisincorporationRecord>}
 
@@ -30,13 +33,27 @@ impl FromIterator<MisincorporationRecord> for  Misincorporations {
 }
 
 impl Misincorporations {
+    /// Generate a [`Misincorporations`] struct from a [mapDamage-v2](https://github.com/ginolhac/mapDamage)'s
+    /// [`misincorporation.txt`](https://ginolhac.github.io/mapDamage/#a4) output file.
+    /// 
+    /// # Usage
+    /// ```
+    /// use pmd_mask::misincorporation::Misincorporations;
+    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let file = "tests/test-data/bam/dummy-MTonly/misincorporation.txt";
+    ///     let misincorporations = Misincorporations::from_path(&file, 0.01)?;
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn from_path(path: impl AsRef<Path>, threshold: f32) -> Result<Self, MisincorporationsError>{
         let file = File::open(&path)
             .map_err(|e| MisincorporationsError::OpenFile(path.as_ref().display().to_string(), e))?;
         Self::from_reader(file, threshold)
     }
 
-    pub fn from_reader<R: Read>(path: R, threshold: f32) -> Result<Self, MisincorporationsError>{
+    /// Private [`Misincorporations`] struct constructor from a generic Reader.
+    /// See [`Misincorporations::from_path`](Misincorporations::from_path) for the public implementation
+    pub(crate) fn from_reader<R: Read>(path: R, threshold: f32) -> Result<Self, MisincorporationsError>{
         use MisincorporationsError::*;
 
         let mut reader = ReaderBuilder::new()
@@ -68,6 +85,27 @@ impl Misincorporations {
         Ok(Self{ inner: threshold_positions }) 
     }
 
+    /// Extrude invalid frequencies from the inner collection of [`MisincorporationRecord`] and return them
+    /// into an owned [`Vec`].
+    /// 
+    /// Invalid [`MisincorporationRecord`]s are those whose [`target_freq()`](`MisincorporationRecord::target_freq`) is either:
+    /// - a `NaN` value (see [`f32::is_nan()`](f32))
+    /// - a `Inf` value (see [`f32::is_infinite()`](f32))
+    /// - a negative float value (see [`f32::is_sign_negative()`](f32))
+    /// 
+    /// # Usage
+    /// ```
+    /// use pmd_mask::misincorporation::Misincorporations;
+    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let file = "tests/test-data/bam/dummy-MTonly/misincorporation.txt";
+    ///     let mut misincorporations = Misincorporations::from_path(&file, 0.01)?;
+    /// 
+    ///     let invalid_freqs = misincorporations.extrude_invalid_frequencies();
+    /// 
+    ///     assert!(invalid_freqs.is_empty());
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn extrude_invalid_frequencies(&mut self) -> Vec<MisincorporationRecord> {
         let mut invalid_positions = Vec::with_capacity(self.inner.len());
 

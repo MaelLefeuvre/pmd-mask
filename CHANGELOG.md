@@ -8,6 +8,7 @@
 - Complete [genome::coordinate::Position](src/genome/coordinate/position.rs) and [genome::coordinate::ChrName](src/genome/coordinate/chr_name/mod.rs) documentation + doctests.
 - Improved [logger::Logger](src/logger/mod.rs) documentation
 - Complete documentation and doctests for [genome::mask::MaskEntry](src/genome/mask/entry/mod.rs), [genome::mask::MaskThreshold](src/genome/mask/threshold/mod.rs) and  [genome::mask::Masks](src/mask/mod.rs).
+- Improved [genome::misincorporation::Misincorporations](src/misincorporation/mod.rs) and [genome::misincorporation::MisincorporationRecord](src/misincorporation/record/mod.rs) documentation + doctests.
 
 # version 0.3.1  (2023-07-19)
 ## Bugfixes 
