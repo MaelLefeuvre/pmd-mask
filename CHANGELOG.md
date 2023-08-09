@@ -3,7 +3,8 @@
 - ***Temporary*** workaround to issue #8 : Providing `pmd-mask` with an invalid or corrupted fasta index now leads to an uncoverable error. This workaround.
 
 ## Documentation
-- Improved [genome::Strand](src/genome/strand/mod.rs) documentation + doctests.
+- Complete [genome::Strand](src/genome/strand/mod.rs) documentation + doctests.
+- Complete [genome::Orientation](src/genome/orientation/mod.rs) documentation + doctests.
 
 # version 0.3.1  (2023-07-19)
 ## Bugfixes 
