@@ -68,6 +68,16 @@ impl ChrName {
 }
 
 impl Display for ChrName {
+    /// Return a formatted [`String`] representation of a [`ChrName`]
+    /// 
+    /// # Example
+    /// ```
+    /// use pmd_mask::genome::ChrName;
+    /// 
+    /// let chr = ChrName::new("MT");
+    /// assert_eq!(format!("{chr: ^8}"), "   MT   ");
+    /// ```
+    /// 
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
     }

@@ -1,23 +1,67 @@
 use std::{fmt::{self, Display, Formatter}};
 use serde::Deserialize;
 
-/// Position within a chromosome or read in base pair
+/// Absolute or relative position within a chromosome or read (in base pairs).
+/// 
+/// This is just a struct containing a [`usize`].
 #[derive(Debug, Clone, Copy, Deserialize, Hash, PartialEq, Eq)]
 pub struct Position(usize);
 
 impl Display for Position {
+    /// Return a formatted [`String`] representation of a [`Position`].
+    /// 
+    /// # Example 
+    /// ```
+    /// use pmd_mask::genome::Position;
+    /// let position: Position = 42.into();
+    /// assert_eq!(&format!("{position: ^6}"), "  42  ");
+    /// ```
+    /// 
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
     }
 }
 
 impl Position {
+    /// Create a new [`Position`] from a usize
+    /// 
+    /// # Example
+    /// ```
+    /// use pmd_mask::genome::Position;
+    /// 
+    /// let position = Position::new(42usize);
+    /// assert_eq!(position, 42.into());
+    /// ```
+    /// 
     pub fn new(value: usize) -> Self {
         Self(value)
     }
 
+    //// Get the inner `usize` contained within a [`Position`] back
+    /// 
+    /// # Example 
+    /// ```
+    /// use pmd_mask::genome::Position;
+    /// 
+    /// assert_eq!(Position::from(42).inner(), 42);
+    /// ```
+    /// 
     pub fn inner(&self) -> usize {
         self.0
+    }
+}
+
+impl From<usize> for Position {
+    /// Convert a [`usize`] from and into a [`Position`]
+    /// ```
+    /// use pmd_mask::genome::Position;
+    /// 
+    /// let pos1: Position = 55.into();
+    /// let pos2: Position = Position::from(55);
+    /// assert_eq!(pos1, pos2);
+    /// ```
+    fn from(value: usize) -> Self {
+        Position(value)
     }
 }
 

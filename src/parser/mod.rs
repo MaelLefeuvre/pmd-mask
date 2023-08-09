@@ -18,6 +18,8 @@ use log::info;
 /// i.e: b, B, Bam, BAM, bam, BaM, bAm, etc. will work., 
 /// d, V, vam, BA,  bame, BLAM, abam, etc. will return an error. 
 /// 
+/// # Usage
+/// 
 /// 
 /// # Errors
 /// returns a [`CliError::InvalidBamOutputFmt`] in case the function fails to pattern match the provided string with a [`bam::Format`] enum variant.
@@ -31,8 +33,16 @@ fn parse_output_fmt(s: &str) -> Result<bam::Format, CliError> {
 }
 
 
-// parses the user-provided string into a u32, specifying the number of allocated
-// 
+/// Parses the user-provided string into a u32, specifying the number of allocated threads
+/// 
+/// # Behavior 
+/// If the provided string parses to `0u32`, the function will internally call [`num_cpus::get()`](`num_cpus`) to
+/// obtain the number of available threads on the current machine.
+/// 
+/// # Errors 
+/// 
+/// May emit a [`CliError::InvalidThreadValue`] if the method ever fails to parse the provided string into a
+/// valid [`u32`]
 fn parse_threads(s: &str) -> Result<u32, CliError> {
     Ok(match s.parse::<u32>().map_err(CliError::InvalidThreadValue)? {
         0 => {
@@ -51,7 +61,8 @@ fn parse_threads(s: &str) -> Result<u32, CliError> {
 }
 
 
-/// pmd-mask: Perform hard selective masking of ancient DNA deamination patterns, using the output misincorporation frequency estimates of MapDamage (see: https://github.com/ginolhac/mapDamage.git).
+/// pmd-mask: Perform hard selective masking of ancient DNA deamination patterns, using the output misincorporation 
+/// frequency estimates of MapDamage-v2 (see: https://github.com/ginolhac/mapDamage.git).
 #[derive(Parser, Debug)]
 #[command(name="pmd-mask", author, version, about, long_about = None, color=ColorChoice::Always)]
 #[clap(propagate_version = true)]

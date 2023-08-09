@@ -5,10 +5,31 @@ use std::io::Write;
 
 use chrono::Local;
 
+/// A basic static logger. This is just a quick wrapper to [`env_logger`], with additional methods.
 pub struct Logger;
 
 impl Logger {
-
+    /// Initialize a logger with a set verbosity. 
+    /// 
+    /// Note that [`env_logger`] uses a static, singleton pattern, andonly a single [`Logger`] may be 
+    /// initialized within a program.
+    /// 
+    /// # Behavior
+    /// 
+    /// Only four levels can be obtained from `verbosity`, and are directly tied to the external [`log::LevelFilter`] enum.
+    /// A quick `verbosity` -> [`LevelFilter`](`log::LevelFilter`) table can be found below.
+    /// 
+    /// See the documentations of [`log::LevelFilter`] and [`log::Level`] for a more detailled explanation of each level's
+    /// behavior.
+    /// 
+    /// | `verbosity`    | [`LevelFilter`](`log::LevelFilter`) variant |
+    /// | -------------- | ------------------------------------------- |
+    /// | `0`            | [`Error`](`log::LevelFilter::Error`)        |
+    /// | `1`            | [`Warn`](`log::LevelFilter::Warn`)          |
+    /// | `2`            | [`Info`](`log::LevelFilter::Info`)          |
+    /// | `3`            | [`Debug`](`log::LevelFilter::Debug`)        |
+    /// | `4..u8::MAX`   | [`Trace`](`log::LevelFilter::Trace`)        |
+    /// 
     pub fn init(verbosity: u8) {
         let log_level = Self::u8_to_loglevel(verbosity);
         let env = Env::default()
@@ -44,6 +65,7 @@ impl Logger {
             .init();
     }
 
+    /// Convert a [`u8`] primitive into a [`log::LevelFilter`] enum variant.
     fn u8_to_loglevel(verbosity: u8) -> LevelFilter {
         match verbosity {
             0            => LevelFilter::Error,
@@ -54,6 +76,7 @@ impl Logger {
         }
     }
 
+    /// Manually Set the level of a [`Logger`]
     #[cfg(test)]
     pub fn set_level(verbosity: u8) {
         log::set_max_level(Self::u8_to_loglevel(verbosity));

@@ -3,10 +3,11 @@ use crate::genome::{ChrName, Orientation, Strand, Position};
 
 use serde::Deserialize;
 
-/// A *partially* deserialized CSV record from a MapDamage `misincorporations.txt` file.
-/// This struct only keeps track of the prevalent mmisincorporation patterns, i.e.:
-/// - `C>T` transitions, at the FivePrime end.
-/// - `G>A` transitions, at the ThreePrime end.
+/// A *partially* deserialized CSV record from a [mapDamage-v2](https://github.com/ginolhac/mapDamage)'s
+/// [`misincorporation.txt`](https://ginolhac.github.io/mapDamage/#a4) output file.
+/// This struct only keeps track of the most prevalent misincorporation patterns, i.e.:
+/// - `C>T` transitions, at the [`Orientation::FivePrime`] end.
+/// - `G>A` transitions, at the [`Orientation::ThreePrime`] end.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct MisincorporationRecord {
     #[serde(rename(deserialize = "Chr"))] pub chromosome: ChrName,
@@ -21,20 +22,22 @@ pub struct MisincorporationRecord {
 
 impl MisincorporationRecord {
     /// Return the relative C>T frequency 
-    /// This is computed as the number of observed C>T, divided by the number of observed C.
+    /// This is computed as the number of observed `C>T`, divided by the number of observed `C`.
     pub(crate) fn c_to_t_freq(&self) -> f32 {
         self.c_to_t as f32 / self.c_counts as f32
     }
 
-    /// Return the relative G>A frequency.
-    /// This is computed as the number of observed G>A, divided by the number of observed G.
+    /// Return the relative `G>A` frequency.
+    /// This is computed as the number of observed `G>A`, divided by the number of observed `G`.
     pub(crate) fn g_to_a_freq(&self) -> f32 {
         self.g_to_a as f32 / self.g_counts as f32
     }
 
-    /// Return the frequency we're really interested in:
-    /// If this entry is a 5p -> return C>T relative frequency (see [c_to_freq()])
-    /// If this entry is a 3p -> return G>A relative frequency (see [g_to_a_freq()])
+    /// Return the misincorporation frequency we're ***really*** interested in:  
+    /// - If this entry is [`Orientation::FivePrime`]  -> return `C>T` relative frequency 
+    ///   (see [`MisincorporationRecord::c_to_freq()`](MisincorporationRecord::c_to_t_freq))
+    /// - If this entry is [`Orientation::ThreePrime`] -> return `G>A` relative frequency 
+    ///   (see [`MisincorporationRecord::g_to_a_freq()`](MisincorporationRecord::g_t_a_freq))
     pub fn target_freq(&self) -> f32 {
         match self.end {
             Orientation::FivePrime  => self.c_to_t_freq(),
