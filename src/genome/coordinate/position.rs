@@ -1,4 +1,4 @@
-use std::{fmt::{self, Display, Formatter}};
+use std::fmt::{self, Display, Formatter};
 use serde::Deserialize;
 
 /// Absolute or relative position within a chromosome or read (in base pairs).

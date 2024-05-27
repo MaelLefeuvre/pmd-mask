@@ -1,4 +1,4 @@
-use std::{fmt::{self, Display, Formatter}};
+use std::fmt::{self, Display, Formatter};
 use serde::Deserialize;
 
 /// Encodes the orientation of a relative bam record position. Two possible variants:  

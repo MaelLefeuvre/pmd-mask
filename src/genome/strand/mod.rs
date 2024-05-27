@@ -168,4 +168,9 @@ mod test {
         assert_eq!(Strand::from_str("*"), Err(StrandError::ParseStrand("*".to_string())));
     }
 
+    #[test]
+    fn from_char() {
+        assert_eq!('+', std::convert::Into::<char>::into(Strand::Forward));
+        assert_eq!('-', std::convert::Into::<char>::into(Strand::Reverse));
+    }
 }

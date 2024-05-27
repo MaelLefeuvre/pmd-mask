@@ -59,7 +59,7 @@ impl TryFrom<&Misincorporations> for Masks {
         for position in value.iter() {
             let record = MaskEntry{chromosome: position.chromosome.clone(), strand: position.strand};
             masks.inner.entry(record)
-                .or_insert(MaskThreshold::default())
+                .or_default()
                 .set_threshold(position.end, position.position);
         }
 
@@ -229,7 +229,7 @@ mod test {
             mis_record!("chr1", Reverse, FivePrime,  8, 1000, 0.01),
             mis_record!("chr1", Reverse, ThreePrime, 6,  600, 0.01),
 
-        ].into_iter())
+        ])
     }
 
     #[test]

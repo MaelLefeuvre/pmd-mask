@@ -4,6 +4,22 @@ Perform hard selective masking of ancient DNA deamination patterns, using the ou
 
 [![Ubuntu](https://github.com/MaelLefeuvre/pmd-mask/actions/workflows/Ubuntu.yml/badge.svg)](https://github.com/MaelLefeuvre/pmd-mask/actions/workflows/Ubuntu.yml) [![MacOS](https://github.com/MaelLefeuvre/pmd-mask/actions/workflows/MacOS.yml/badge.svg)](https://github.com/MaelLefeuvre/pmd-mask/actions/workflows/MacOS.yml)
 
+# Preface
+
+`pmd-mask` is a simple preprocessing and quality filtration command-line utility designed to selectively mask potentially deaminated nucleotides within ancient DNA alignement files, changing putative deaminated bases to ‘N’ and quality to ‘!’.
+
+This method may be regarded as a conservative compromise between post-morterm damage rescaling methods such as [MapDamage](https://ginolhac.github.io/mapDamage/) or [PMDtools](https://github.com/pontussk/PMDtools), and hard-clipping methods such as [`bamUtils trimBam`]. Here, `pmd-mask` instead leverages nucleotide and position specific misincorporation rate estimes emitted from [MapDamage](https://ginolhac.github.io/mapDamage/) to selectively trim read ends, up-until the local misincorporation rate reaches a designated, user-defined threshold (default: 1%). This approach can thus greatly mitigate the loss of information usually displayed when applying hard-clipping on ancient DNA samples, by *specifically* targeting potential `C>T` and `G>A` transitions on both the 5’ and 3’ end of the read, respectively.
+
+
+<p align="center">
+  <figure align="center">
+    <img src="docs/images/preface-illustration.png" alt="An illustration of how pmd-mask operates" title="This is a Title"> 
+    <figcaption>
+      <em>Figure 1.</em> An illustration of how pmd-mask operates. 
+    </figcaption>
+  </figure>
+</p>
+
 
 # Installation
 
