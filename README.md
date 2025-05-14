@@ -2,7 +2,7 @@
 
 Perform hard selective masking of ancient DNA deamination patterns, using the output misincorporation frequency estimates of [MapDamage](https://github.com/ginolhac/mapDamage.git).  
 
-[![Ubuntu](https://github.com/MaelLefeuvre/pmd-mask/actions/workflows/Ubuntu.yml/badge.svg)](https://github.com/MaelLefeuvre/pmd-mask/actions/workflows/Ubuntu.yml) [![MacOS](https://github.com/MaelLefeuvre/pmd-mask/actions/workflows/MacOS.yml/badge.svg)](https://github.com/MaelLefeuvre/pmd-mask/actions/workflows/MacOS.yml)
+ [![DOI](https://zenodo.org/badge/610250265.svg)](https://doi.org/10.5281/zenodo.15403149) [![Ubuntu](https://github.com/MaelLefeuvre/pmd-mask/actions/workflows/Ubuntu.yml/badge.svg)](https://github.com/MaelLefeuvre/pmd-mask/actions/workflows/Ubuntu.yml) [![MacOS](https://github.com/MaelLefeuvre/pmd-mask/actions/workflows/MacOS.yml/badge.svg)](https://github.com/MaelLefeuvre/pmd-mask/actions/workflows/MacOS.yml)
 
 # Preface
 
@@ -11,20 +11,21 @@ Perform hard selective masking of ancient DNA deamination patterns, using the ou
 This method may be regarded as a conservative compromise between post-morterm damage rescaling methods such as [`MapDamage`](https://ginolhac.github.io/mapDamage/) or [`PMDtools`](https://github.com/pontussk/PMDtools), and hard-clipping methods such as the [`trimBam`](https://genome.sph.umich.edu/wiki/BamUtil:_trimBam) module of [`bamUtil`](https://github.com/statgen/bamUtil). Here, `pmd-mask` instead leverages nucleotide and position specific misincorporation rate estimes emitted from [`MapDamage`](https://ginolhac.github.io/mapDamage/) to selectively trim read ends, up-until the local misincorporation rate reaches a designated, user-defined threshold (default: 1%). This approach can thus greatly mitigate the loss of information usually displayed when applying hard-clipping on ancient DNA samples, by *specifically* targeting potential `C>T` and `G>A` transitions on both the `5’` and `3’` end of the read, respectively.
 
 <p align="center">
-  <img src="docs/images/preface-illustration.png" alt="An illustration of how pmd-mask operates" title="This is a Title">
+  <img src="docs/images/preface-illustration.svg" alt="An illustration of the pmd-mask workflow and functioning" title="">
   <br>
   <caption>
-      <em>Figure 1.</em> An illustration of how pmd-mask operates. 
+      <em>Figure 1.</em> Illustrative diagram of the pmd-mask workflow and functioning.
   </caption>
 </p>
 
 
 # Installation
 
-## Dependencies
+## Source-compilation (recommended)
 
+### Dependencies
 ### Cargo
-This project is written in [Rust](https://www.rust-lang.org/), and thus requires [cargo](https://crates.io/) for source compilation.
+This project is written in [Rust](https://www.rust-lang.org/), and thus requires [cargo](https://crates.io/) for source compilation. (Note that the current minimum supported version for source-compilation is `Rust  1.64.0`)
 
 To install cargo:
 ```Bash
@@ -32,7 +33,6 @@ curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh
 ```
 
 ### Compilation
-
 1. Clone this repository
 ```Bash
 git clone git@github.com:MaelLefeuvre/pmd-mask.git
@@ -52,6 +52,9 @@ RUSTFLAGS="-Ctarget-cpu=native" cargo install --path .
 ```Bash
 pmd-mask --help
 ```
+
+## Precompiled versions
+If your workstation is operated under a `Linux/GNU` system and you do not wish to source-compile `pmd-mask`, precompiled binaries are currently available for `x86_64-unknown-linux-gnu` architectures. See the [Release](https://github.com/MaelLefeuvre/pmd-mask/releases) tab.
 
 # Usage
 ## Data requirements:
@@ -82,50 +85,8 @@ pmd-mask --reference data/GRCh37/Homo_sapiens.GRCh37.dna.primary_assemby.fa --mi
 ```
 samtools view -h ./MT23/MT23.srt.rmdup.rescaled.bam {1..22} | pmd-mask -f ./hs37d5.fa -m ./MT23/misincorporation.txt -Ob --threshold 0.02 --quiet | samtools mpileup -RB -q25 -Q25 -f ./hs37d5.fa.gz -l ./v52.2_1240K_public.bed - | grups pwd-from-stin --samples 0 --self-comparison --sample-name MT23
 ```
+# Contributing
 
-# Development
+Feedback, issue reports and contributions are gladly accepted! If you encounter any issue while using this software, would like to request additional features, or simply wish to contribute, please submit a Github issue [here](https://github.com/MaelLefeuvre/pmd-mask/issues).
 
-## Running benchmarks and regression testing
-
-Listing benchmarrks: 
-```Bash
-cargo bench -- --list 2>&1 | grep "bench$"
-```
-
-Running a quick bench using all benchmark files (3s warmup time, followed by 5s measurement time)
-```Bash
-cargo bench
-```
-
-An HTML report should be available in the `target/criterion` subdirectory
-```Bash
-firefox ./target/criterion/report/index.html
-```
-
-Running a specific bench: 
-```Bash
-cargo bench --bench apply_pmd_mask -- --warm-up-time 10 --measurement-time 60
-```
-
-
-
-## Getting code coverage metrics for the pmd-mask codebase
-Install [llvm-cov](https://github.com/taiki-e/cargo-llvm-cov) 
-```Bash
-cargo install llvm-cov
-```
-
-Run `llvm-cov`
-```Bash
-# Using shell output. either stdout or pager
-cargo llvm-cov --workspace --all 
-# or 
-cargo llvm-cov --worskpace --all --text | less -R
-
-# Html report
-cargo llvm-cov --workspace --all --open
-
-# lcov format
-cargo llvm-cov --workspace --all --lcov > lcov.info
-```
-
+For developpers and pull-requests, additional information and context regarding development tools surrounding `pmd-mask` can be found in the [`CONTRIBUTING.md`](/CONTRIBUTING.md) file.
