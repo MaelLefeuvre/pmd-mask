@@ -7,8 +7,8 @@
    viewBox="0 0 197.64595 167.0837"
    version="1.1"
    id="svg1"
-   inkscape:version="1.3.2 (1:1.3.2+202311252150+091e20ef0f)"
-   sodipodi:docname="supp-figure-pmd-mask-workflow.svg"
+   inkscape:version="1.3.2 (091e20e, 2023-11-25, custom)"
+   sodipodi:docname="preface-illustration.svg"
    inkscape:export-filename="supp-figure-pmd-mask-workflow.pdf"
    inkscape:export-xdpi="96"
    inkscape:export-ydpi="96"
@@ -26,15 +26,15 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="0.35355339"
-     inkscape:cx="947.52308"
-     inkscape:cy="261.62951"
+     inkscape:zoom="0.5"
+     inkscape:cx="428"
+     inkscape:cy="23"
      inkscape:window-width="1920"
-     inkscape:window-height="1007"
-     inkscape:window-x="0"
-     inkscape:window-y="0"
+     inkscape:window-height="1057"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
      inkscape:window-maximized="1"
-     inkscape:current-layer="g94" />
+     inkscape:current-layer="svg1" />
   <defs
      id="defs1">
     <rect
@@ -492,11 +492,18 @@
          transform="rotate(45)" />
     </clipPath>
   </defs>
+  <rect
+     style="fill:#ffffff;fill-rule:evenodd;stroke:#ffffff;stroke-width:0.409001;fill-opacity:1;stroke-opacity:1"
+     id="rect1"
+     width="197.23701"
+     height="166.832"
+     x="0.2045005"
+     y="0.2045005" />
   <g
      inkscape:label="Calque 1"
      inkscape:groupmode="layer"
      id="layer1"
-     transform="translate(-3.2515245,-70.637501)">
+     transform="translate(-3.2514944,-70.637382)">
     <rect
        style="fill:#f8f7f7;fill-opacity:1;stroke:#000000;stroke-width:0.2;stroke-linecap:butt;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
        id="rect50-9"
@@ -656,7 +663,7 @@
            sodipodi:role="line"
            style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-size:3.52778px;font-family:Roboto;-inkscape-font-specification:'Roboto Light';stroke:none;stroke-width:0.2"
            x="99.703003"
-           y="95.848709"
+           y="96.005768"
            id="tspan107-0-6">and relative position for each type of misincorporation</tspan></text>
       <g
          id="g57"
@@ -702,7 +709,7 @@
                sodipodi:role="line"
                style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-size:3.52778px;font-family:Roboto;-inkscape-font-specification:'Roboto Light';stroke:none;stroke-width:0.2"
                x="131.92339"
-               y="239.35355"
+               y="239.5106"
                id="tspan47-3">using a user-defined probability threshold.</tspan></text>
         </g>
       </g>
